@@ -20,16 +20,20 @@ class Mass(IMass,CreatingMass):
         self.__bottomright :Mass = None
         
         
-        self.__around :list[list[Mass]] = [
-            [self.__topleft, self.__top, self.__topright],
-            [self.__left, None, self.__right],
-            [self.__bottomleft, self.__bottom, self.__bottomright]
-        ]
+        self.__around :list[list[Mass]] = []
         """マスをidxで取り出しやすくしたもの
         """
         
         
         self.stone :Stone = Stone.NONE
+        
+    
+    def SetAround(self) -> None:
+        self.__around :list[list[Mass]] = [
+            [self.__topleft, self.__top, self.__topright],
+            [self.__left, None, self.__right],
+            [self.__bottomleft, self.__bottom, self.__bottomright]
+        ]
         
         
     @property
@@ -76,16 +80,21 @@ class Mass(IMass,CreatingMass):
     
     def AddAccessor(self) -> None:
         
-        if(self.__bottom == None and self.__right == None): return
+        if(self.__bottom == None and self.__right == None): 
+            self.SetAround()
+            return
         
         if(self.__bottom == None):
             self.__right.__left = self
             self.__right.AddAccessor()
+            self.SetAround()
             return
             
         self.__bottom.__top = self
         
-        if(self.__right == None): return
+        if(self.__right == None): 
+            self.SetAround()
+            return
         
         self.__right.__left = self
         self.__bottomright = self.__bottom.__right
@@ -97,6 +106,8 @@ class Mass(IMass,CreatingMass):
         self.__right.AddAccessor()
         if(self.__left == None): self.__bottom.AddAccessor()
         
+        self.SetAround()
+        
         
     def SetStone(self, stone: Stone) -> bool:
         self.stone = stone
@@ -104,8 +115,9 @@ class Mass(IMass,CreatingMass):
         ans1 = self.Count((0,0),0,self.stone) + self.Count((2,2),0,self.stone) >= 5
         ans2 = self.Count((0,1),0,self.stone) + self.Count((2,1),0,self.stone) >= 5
         ans3 = self.Count((0,2),0,self.stone) + self.Count((2,0),0,self.stone) >= 5
+        ans4 = self.Count((1,0),0,self.stone) + self.Count((1,2),0,self.stone) >= 5
         
-        return ans1 or ans2 or ans3
+        return ans1 or ans2 or ans3 or ans4
         
         
         

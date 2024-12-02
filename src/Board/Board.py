@@ -16,7 +16,7 @@ class Board():
         
     
     def SetStone(self, x: int, y: int, stone: Stone) -> bool:
-        return self.__board[x][y].SetStone(stone)
+        return self.__board[y][x].SetStone(stone)
         
         
     def MakeBoard(self, w:int, h:int):
