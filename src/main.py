@@ -12,6 +12,8 @@ def Main() -> None:
     board: Board = container.resolve(Board)
     board.MakeBoard(5,5)
     board.PrintBoard()
+    
+    print(board.GetBoardInt())
 
 
 if __name__ == "__main__":

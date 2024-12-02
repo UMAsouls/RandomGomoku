@@ -25,6 +25,14 @@ class Board():
         self.__width = w
         self.__height = h
         
+    def GetBoardInt(self) -> list[list[int]]:
+        return [
+            [
+                i.GetStatus() for i in j
+            ]
+            for j in self.__board
+        ]
+        
     def PrintBoard(self) -> None:
         sboard: str = ""
         
