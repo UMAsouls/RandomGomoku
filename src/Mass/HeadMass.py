@@ -9,9 +9,6 @@ class HeadMass(IHeadMass, Mass):
     def __init__(self) -> None:
         super().__init__()
         
-    def __MakeMassLine(self,width) -> Iterator[Mass]:
-        if(width >= 0): yield Mass()
-        
     def MakeBoard(self, width: int, height: int) -> list[list[CreatingMass]]:
         
         board: list[list[CreatingMass]] = [
@@ -22,8 +19,6 @@ class HeadMass(IHeadMass, Mass):
         ]
         
         board[0][0] = self
-        
-        print(board)
         
         for i in range(height-1):
             for j in range(width-1):
