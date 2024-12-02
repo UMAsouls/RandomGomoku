@@ -1,5 +1,9 @@
 from injector import Injector, Binder
 
+from Interfaces import IHeadMass
+
+from Mass import HeadMass
+
 
 class Dependency():
     def __init__(self):
@@ -7,6 +11,7 @@ class Dependency():
         
     @classmethod
     def config(cls, binder:Binder):
+        binder.bind(IHeadMass, HeadMass)
         pass
     
     def resolve(self, cls: type):
