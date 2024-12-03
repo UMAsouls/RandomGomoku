@@ -20,13 +20,13 @@ class HeadMass(IHeadMass, Mass):
         
         board[0][0] = self
         
-        for i in range(height-1):
+        for i in range(height):
             for j in range(width-1):
                 board[i][j].Right = board[i][j+1]
-                board[i][j].Bottom = board[i+1][j]
                 
-        for i in range(width-1):
-            board[height-1][i].Right = board[height-1][i+1]
+        for i in range(height-1):
+            for j in range(width):
+                board[i][j].Bottom = board[i+1][j]
                 
                 
         self.AddAccessor()
