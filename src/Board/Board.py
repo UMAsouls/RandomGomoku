@@ -53,8 +53,6 @@ class Board():
         wpos1 = white_rand1.RandomMassGet()
         wpos2 = white_rand2.RandomMassGet()
         
-        print(wpos1, wpos2)
-        
         if(randint(0,1) == 0): wpos = wpos1
         else: wpos = wpos2
         
