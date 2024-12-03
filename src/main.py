@@ -12,7 +12,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 def Main() -> None:
     container = Dependency()
     board: Board = container.resolve(Board)
-    board.MakeBoard(10,10)
+    board.MakeBoard(19,19)
     
     
     stone = Stone.WHITE

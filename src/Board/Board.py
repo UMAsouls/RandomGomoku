@@ -47,7 +47,6 @@ class Board():
         
         for i in black_rands:
             pos = i.RandomMassGet()
-            print(pos)
             self.SetStone(pos[0], pos[1], Stone.BLACK)
             
         
@@ -81,10 +80,12 @@ class Board():
         
     def PrintBoard(self) -> None:
         sboard: str = ""
+        chg_map: dict[int, str] = {0:"□", 1:"○", 2:"●"}
         
         for i in self.__board:
             for j in i:
-                sboard += f" {j.GetStatus()}"
+                s = j.GetStatus()
+                sboard += f" {chg_map[s]}"
             sboard += "\n"
             
         print(sboard)
