@@ -9,6 +9,8 @@ from const import Stone
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
+
+
 def Main() -> None:
     container = Dependency()
     board: Board = container.resolve(Board)
