@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from const import Stone
+from RandomGomoku.const import Stone
 
 class IMass(ABC):
     @abstractmethod

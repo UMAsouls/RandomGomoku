@@ -1,7 +1,7 @@
 
 from collections.abc import Iterator
-from Interfaces import IMass, CreatingMass
-from const import Stone
+from RandomGomoku.Interfaces import IMass, CreatingMass
+from RandomGomoku.const import Stone
 
 
 class Mass(IMass,CreatingMass):

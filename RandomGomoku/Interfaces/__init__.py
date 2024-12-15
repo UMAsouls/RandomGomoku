@@ -1,3 +1,3 @@
-from Interfaces.IMass import IMass
-from Interfaces.IHeadMass import IHeadMass
-from Interfaces.CreatingMass import CreatingMass
+from RandomGomoku.Interfaces.IMass import IMass
+from RandomGomoku.Interfaces.IHeadMass import IHeadMass
+from RandomGomoku.Interfaces.CreatingMass import CreatingMass

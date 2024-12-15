@@ -1,11 +1,11 @@
 from injector import inject
 from random import randint
 
-from Interfaces import IHeadMass, IMass
+from RandomGomoku.Interfaces import IHeadMass, IMass
 
-from const import Stone
+from RandomGomoku.const import Stone
 
-from Board.RandomSetter import RandomSetter
+from RandomGomoku.Board.RandomSetter import RandomSetter
 
 class Board():
     

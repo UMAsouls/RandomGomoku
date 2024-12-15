@@ -1,1 +1,1 @@
-from const.Stone import Stone
+from RandomGomoku.const.Stone import Stone

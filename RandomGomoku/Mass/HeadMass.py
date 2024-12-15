@@ -1,8 +1,8 @@
 from collections.abc import Iterator
 
-from Interfaces import IHeadMass, CreatingMass
+from RandomGomoku.Interfaces import IHeadMass, CreatingMass
 
-from Mass import Mass
+from RandomGomoku.Mass import Mass
 
 
 class HeadMass(IHeadMass, Mass):

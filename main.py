@@ -1,13 +1,12 @@
-from Board import Board
+from RandomGomoku.Board import Board
 
-from Dependency import Dependency
+from RandomGomoku.Dependency import Dependency
 
 import os
 
-from const import Stone
+import sys
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
+from RandomGomoku.const import Stone
 
 
 

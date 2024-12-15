@@ -1,10 +1,10 @@
-from Board import Board
+from RandomGomoku.Board import Board
 
-from Dependency import Dependency
+from RandomGomoku.Dependency import Dependency
 
 import os
 
-from const import Stone
+from RandomGomoku.const import Stone
 
 def GetBoard(w: int, h: int) -> Board:
     container = Dependency()

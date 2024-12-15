@@ -1,2 +1,2 @@
-from Mass.Mass import Mass
-from Mass.HeadMass import HeadMass
+from RandomGomoku.Mass.Mass import Mass
+from RandomGomoku.Mass.HeadMass import HeadMass
