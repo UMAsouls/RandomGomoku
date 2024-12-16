@@ -1,12 +1,13 @@
-from Board import Board
+from RandomGomoku.Board import Board
 
-from Dependency import Dependency
+from RandomGomoku.Dependency import Dependency
 
 import os
 
-from const import Stone
+import sys
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+from RandomGomoku.const import Stone
+
 
 
 def Main() -> None:
@@ -15,8 +16,8 @@ def Main() -> None:
     board.MakeBoard(19,19)
     
     
-    stone = Stone.WHITE
-    s = "白"
+    stone = Stone.BLACK
+    s = "黒"
     while(True):
         board.PrintBoard()
         x = int(input(f"置くx座標({s}):"))

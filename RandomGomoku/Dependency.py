@@ -1,8 +1,8 @@
 from injector import Injector, Binder
 
-from Interfaces import IHeadMass
+from RandomGomoku.Interfaces import IHeadMass
 
-from Mass import HeadMass
+from RandomGomoku.Mass import HeadMass
 
 
 class Dependency():

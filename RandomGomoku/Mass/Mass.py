@@ -1,7 +1,7 @@
 
 from collections.abc import Iterator
-from Interfaces import IMass, CreatingMass
-from const import Stone
+from RandomGomoku.Interfaces import IMass, CreatingMass
+from RandomGomoku.const import Stone
 
 
 class Mass(IMass,CreatingMass):
@@ -112,10 +112,10 @@ class Mass(IMass,CreatingMass):
     def SetStone(self, stone: Stone) -> bool:
         self.stone = stone
         
-        ans1 = self.Count((0,0),0,self.stone) + self.Count((2,2),0,self.stone) >= 5
-        ans2 = self.Count((0,1),0,self.stone) + self.Count((2,1),0,self.stone) >= 5
-        ans3 = self.Count((0,2),0,self.stone) + self.Count((2,0),0,self.stone) >= 5
-        ans4 = self.Count((1,0),0,self.stone) + self.Count((1,2),0,self.stone) >= 5
+        ans1 = self.Count((0,0),0,self.stone) + self.Count((2,2),0,self.stone) - 1 >= 5
+        ans2 = self.Count((0,1),0,self.stone) + self.Count((2,1),0,self.stone) - 1 >= 5
+        ans3 = self.Count((0,2),0,self.stone) + self.Count((2,0),0,self.stone) - 1 >= 5
+        ans4 = self.Count((1,0),0,self.stone) + self.Count((1,2),0,self.stone) - 1 >= 5
         
         return ans1 or ans2 or ans3 or ans4
         

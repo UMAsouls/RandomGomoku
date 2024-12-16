@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from .IMass import IMass
+from RandomGomoku.Interfaces import IMass
 
 class IHeadMass(ABC):
     """Massの左上のところ。Board生成とかを担当する
