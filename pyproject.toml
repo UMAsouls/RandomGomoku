@@ -1,6 +1,6 @@
 # pyproject.tomlのビルドツールを指定します。
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=40.0.0"]
 build-backend = "setuptools.build_meta"
 
 # プロジェクトの設定を書きます。
@@ -17,4 +17,10 @@ dependencies = [
 
 # どのフォルダをモジュールとして扱うかを書きます。
 [tool.setuptools]
-packages = ["RandomGomoku"]
+packages = [
+    "RandomGomoku",
+    "RandomGomoku.Board",
+    "RandomGomoku.Mass",
+    "RandomGomoku.Interfaces",
+    "RandomGomoku.const"
+]
