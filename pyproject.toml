@@ -17,4 +17,4 @@ dependencies = [
 
 # どのフォルダをモジュールとして扱うかを書きます。
 [tool.setuptools]
-py-modules = ["RandomGomoku"]
+packages = ["RandomGomoku"]
