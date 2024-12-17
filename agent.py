@@ -5,6 +5,8 @@ from RandomGomoku.const import Stone
 
 import random
 
+from typing import Callable
+
 WIDTH = 19
 HEIGHT = 19
 
@@ -21,24 +23,20 @@ def Agent_Random(board: Board, stone: Stone) -> bool:
     return board.SetStone(x,y,stone)
     
 
-def Main() -> None:
+def Main(agent_black: Callable[[Board, Stone], bool], agent_white: Callable[[Board, Stone], bool]) -> None:
     board: Board = GetBoard(WIDTH,HEIGHT)
     
-    
-    stone = Stone.BLACK
-    s = "黒"
     while(True):
         board.PrintBoard()
-        if(Agent_Random(board, stone)): 
+        if(agent_black(board, Stone.BLACK)): 
             board.PrintBoard()
-            print(f"{s}の勝利!")
+            print(f"黒の勝利!")
             return
             
-        if(stone == Stone.WHITE):
-            stone = Stone.BLACK
-            s = "黒"
-        else:
-            stone = Stone.WHITE
-            s = "白"
+        board.PrintBoard()
+        if(agent_white(board, Stone.WHITE)): 
+            board.PrintBoard()
+            print(f"白の勝利!")
+            return
             
-Main()
+Main(Agent_Random, Agent_Random)
