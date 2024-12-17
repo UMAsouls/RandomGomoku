@@ -1,0 +1,20 @@
+# pyproject.tomlのビルドツールを指定します。
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+# プロジェクトの設定を書きます。
+[project]
+name = "RandomGomoku"
+version = "0.0.1"
+description = "RandomGomokuのモジュール"
+requires-python = ">=3.10.2"
+authors = [{ name = "UMA" }]
+# 依存関係も書けます。
+dependencies = [
+    "injector",
+]
+
+# どのフォルダをモジュールとして扱うかを書きます。
+[tool.setuptools]
+py-modules = ["RandomGomoku"]
