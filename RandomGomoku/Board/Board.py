@@ -65,7 +65,7 @@ class Board():
         self.__width = w
         self.__height = h
         
-        self.RandomSet()
+        # self.RandomSet()
         
         
     def GetBoardInt(self) -> list[list[int]]:
@@ -78,12 +78,20 @@ class Board():
         
         
     def PrintBoard(self) -> None:
+        count1: int = 0
+        count2: int = 0
         sboard: str = ""
         chg_map: dict[int, str] = {0:"🔳", 1:"🔴", 2:"🔵"}
         for i in self.__board:
             for j in i:
                 s = j.GetStatus()
                 sboard += f"{chg_map[s]}"
+                if(s == 1): count1 += 1
+                elif(s == 2): count2 += 1
             sboard += "\n"
             
         print(sboard)
+        print(f"Black: {count1} White: {count2}")
+        
+    def copy(self): 
+        return self.GetBoardInt()

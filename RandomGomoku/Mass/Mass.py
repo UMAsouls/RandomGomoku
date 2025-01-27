@@ -130,8 +130,8 @@ class Mass(IMass,CreatingMass):
         
         
     def GetStatus(self) -> int:
-        if(self.stone == Stone.WHITE): return 1
-        elif(self.stone == Stone.BLACK): return 2
+        if(self.stone == Stone.BLACK): return 1
+        elif(self.stone == Stone.WHITE): return 2
         else: return 0
     
         
