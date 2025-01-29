@@ -16,6 +16,10 @@ class GomokuEnv:
         self.current_player = 1
         self.blackStones = 0
         self.whiteStones = 0
+        if self.stone == Stone.BLACK:
+            self.train_player = 1
+        else:
+            self.train_player = 2
         self.reset()
 
     def reset(self):
@@ -52,15 +56,19 @@ class GomokuEnv:
 
         # ゲームが終了した場合
         if done:
-            if self.current_player == 1:
-                reward += 10000
+            if self.current_player == self.train_player:
+                reward += 10000  # 黒が勝った
             else:
-                reward += -10000
+                reward += -10000  # 白が勝った
 
         # ゲームが終了しない場合（続行）
         else:
             # 現在の手の進行具合を考慮して報酬を調整
             reward += self.evaluate_action(x, y)
+
+            # 石を置いた位置に基づく報酬（戦略的な位置）
+            strategic_reward = self.evaluate_strategic_position(x, y)
+            reward += strategic_reward
 
         # 次のプレイヤーに交代
         self.current_player = 3 - self.current_player
@@ -96,7 +104,7 @@ class GomokuEnv:
         for i in range(1, 5):
             nx, ny = x + i * dx, y + i * dy
             if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
-                if self.board.GetBoardInt()[ny][nx] == self.current_player:
+                if self.board.GetBoardInt()[ny][nx] == self.train_player:
                     stone_count += 1
                 elif self.board.GetBoardInt()[ny][nx] == 0:
                     empty_count += 1
@@ -110,7 +118,7 @@ class GomokuEnv:
         for i in range(1, 5):
             nx, ny = x - i * dx, y - i * dy
             if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
-                if self.board.GetBoardInt()[ny][nx] == self.current_player:
+                if self.board.GetBoardInt()[ny][nx] == self.train_player:
                     stone_count += 1
                 elif self.board.GetBoardInt()[ny][nx] == 0:
                     empty_count += 1
@@ -129,7 +137,6 @@ class GomokuEnv:
             return 1000  # 3連続を作れる場合
         if stone_count == 2 and empty_count == 3:
             return 500
-        
 
         # 相手の妨害（相手が4つ並べていたら阻止）
         if opponent_stone_count == 1 and empty_count == 1:
@@ -143,6 +150,19 @@ class GomokuEnv:
             score += 10 * empty_count
 
         return score
+
+    def evaluate_strategic_position(self, x, y):
+        """
+        戦略的な位置に置かれた石に対する報酬
+        中央に近いほど高い価値をつける
+        """
+        center_x, center_y = self.board_size // 2, self.board_size // 2
+        distance = abs(center_x - x) + abs(center_y - y)  # 中心からの距離を計算
+
+        # 中央に近いほど高い報酬
+        strategic_score = max(0, 100 - distance)  # 中心からの距離が近いほど報酬が高くなる
+        return strategic_score
+
 
     def get_human_action(self):
         while True:

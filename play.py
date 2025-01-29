@@ -1,9 +1,11 @@
 from dqn import DQNAgent
 import GomokuEnv
 from  dqn import RandomAgent
+from GomokuEnv import Stone
+
 random_agent = RandomAgent()
 dqn_agent = DQNAgent()
-env = GomokuEnv.GomokuEnv()
+env = GomokuEnv.GomokuEnv(stone=Stone.BLACK)
 
 
 save_path = './dqn_model'
@@ -17,7 +19,7 @@ total_reward = 0
 print('Initial State:')
 #ai vs human
 # while not done:
-#     if env.current_player == 1:
+#     if env.current_player == env.train_player:
 #         action = dqn_agent.get_action(state)  # DQNエージェントのターン
 #     else:
 #         action = env.get_human_action()
@@ -33,7 +35,7 @@ print('Initial State:')
 #ai vs random
 
 while not done:
-    if env.current_player == 1:
+    if env.current_player == env.train_player:
         action = dqn_agent.get_action(state)  # DQNエージェントのターン
     else:
         action = random_agent.get_action(state)
@@ -44,6 +46,7 @@ while not done:
     print('Current State:')
     env.render()
     if done:
+        env.board.PrintFinalBoard()
         break
    
     
