@@ -14,6 +14,8 @@ class GomokuEnv:
         self.board.MakeBoard(board_size, board_size)
         self.stone = stone
         self.current_player = 1
+        self.blackStones = 0
+        self.whiteStones = 0
         self.reset()
 
     def reset(self):
@@ -21,6 +23,8 @@ class GomokuEnv:
         self.board: Board = self.container.resolve(Board)
         self.board.MakeBoard(self.board_size,self.board_size)
         self.current_player = 1
+        self.blackStones = 0
+        self.whiteStones = 0
         return self.board.copy()
 
     def step(self, action):
@@ -35,6 +39,14 @@ class GomokuEnv:
             self.stone = Stone.WHITE
         # print(f"Player {self.current_player} plays {self.stone} at ({x}, {y})")
         done = self.board.SetStone(x, y, self.stone)
+        if self.stone == Stone.BLACK:
+            self.blackStones += 1
+        else:
+            self.whiteStones += 1
+            
+        if not(self.blackStones-self.whiteStones == 1 or self.blackStones == self.whiteStones):
+            raise ValueError("石の数がおかしいです")
+        
         # self.board.PrintBoard()
 
         if done:

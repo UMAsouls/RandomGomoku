@@ -77,29 +77,29 @@ class DQNAgent:
         self.optimizer.setup(self.qnet)
 
     def get_action(self, state):
-        # 状態を1次元のベクトルに変換
         state = np.array(state)
         state = state[np.newaxis, :]  # (1, 19, 19)に変換
         state_flat = state.reshape(state.shape[0], -1)  # (1, 361)に変換
 
-        # Qネットワークを使用してQ値を計算
         qs = self.qnet(state_flat)  # Q値の計算
-
-        # Q値をNumPy配列に変換
-        qs = qs.data  # VariableからNumPy配列に変換
+        qs = qs.data[0]  # (1, 361) → (361,)
 
         # 空いている場所を取得
         empty_positions = [(j, i) for i in range(self.board_size) for j in range(self.board_size) if state[0][i][j] == 0]
-        #print(state)
-        # print(empty_positions)
-        if 0 < self.epsilon:
+
+        # 空いているマスのQ値を抽出
+        empty_q_values = [qs[i * self.board_size + j] for j, i in empty_positions]
+
+        if np.random.rand() < self.epsilon:
             # ランダムに行動を選ぶ（探索）
-            action = empty_positions[np.random.randint(0, len(empty_positions))]  # 空いている位置からランダムに選択
+            action = random.choice(empty_positions)
         else:
             # Q値が最大となる行動を選択（活用）
-            action = empty_positions[np.argmax(qs[0])]
+            max_q_index = np.argmax(empty_q_values)
+            action = empty_positions[max_q_index]
 
         return action
+
 
     def update(self, state, action, reward, next_state, done):
         self.replay_buffer.add(state, action, reward, next_state, done)
@@ -112,13 +112,14 @@ class DQNAgent:
         qs = self.qnet(state)
         
         if action.shape[1] == 2:
-            action = np.argmax(action, axis=1)
+            action = np.ravel_multi_index(action.T, (19, 19))
         
         q = qs[np.arange(self.batch_size), action]
         
         next_qs = self.qnet_target(next_state)
-        next_q = next_qs.max(axis=1)
-        next_q.unchain()
+        next_q = F.max(next_qs, axis=1)
+
+        # next_q.unchain()
         target = reward + (1 - done) * self.gamma * next_q
 
         loss = F.mean_squared_error(q, target)
@@ -149,6 +150,8 @@ env = GomokuEnv.GomokuEnv()
 dqn_agent = DQNAgent()
 random_agent = RandomAgent()
 reward_history = []
+first_win = 0
+second_win = 0
 
 # 学習の実行
 for episode in range(episodes):
@@ -165,6 +168,13 @@ for episode in range(episodes):
         
         
         next_state, reward, done, info = env.step(action)
+        
+        
+        if(done):
+            if(env.current_player !=1):
+                first_win += 1
+            else:
+                second_win += 1
 
         dqn_agent.update(state, action, reward, next_state, done)
         state = next_state
@@ -176,6 +186,7 @@ for episode in range(episodes):
     reward_history.append(total_reward)
     if episode % 1 == 0:
         print("episode :{}, total reward : {}".format(episode, total_reward))
+        print("first win : {}, second win : {},percentage : {}".format(first_win, second_win, first_win/(first_win+second_win)))
 
 # モデルの保存
 save_path = './dqn_model'
