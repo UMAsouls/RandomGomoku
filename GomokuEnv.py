@@ -58,3 +58,14 @@ class GomokuEnv:
         self.current_player = 3 - self.current_player  # 交代後、次のプレイヤーに切り替え
 
         return self.board.copy(), reward, done, {}
+    def get_human_action(self):
+        while True:
+            x = int(input("x座標を入力してください: "))
+            y = int(input("y座標を入力してください: "))
+            if self.board.GetBoardInt()[y][x] == 0:
+                break
+            else:
+                print("そこには置けません")
+        return (y, x)
+    def render(self):
+        self.board.PrintBoard()
