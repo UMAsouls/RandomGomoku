@@ -11,15 +11,19 @@ import dezero.layers as L
 import os
 import GomokuEnv
 from GomokuEnv import Stone
+#赤＝黒：青＝白
 
 class RandomAgent:
     def __init__(self):
         pass
-
+    
+    #state=盤面の状態
+    #empty_positions=空いてるマスのリスト作成
     def get_action(self, state):
-        empty_positions = [(i, j) for i in range(19) for j in range(19) if state[i][j] == 0]
+        empty_positions = [(j, i) for i in range(19) for j in range(19) if state[i][j] == 0]
         return random.choice(empty_positions)
 
+#DQNの経験を保存するバッファ
 class ReplayBuffer:
     def __init__(self, buffer_size, batch_size):
         self.buffer = deque(maxlen=buffer_size)
@@ -42,7 +46,7 @@ class ReplayBuffer:
         done = np.array([x[4] for x in data]).astype(bool)
         return state, action, reward, next_state, done
 
-
+#盤面の状態を入力し、各手のQ値を出力するニューラルネットワーク
 class QNet(Model):
     def __init__(self, action_size):
         super().__init__()
@@ -85,21 +89,17 @@ class DQNAgent:
         qs = qs.data  # VariableからNumPy配列に変換
 
         # 空いている場所を取得
-        empty_positions = [(i, j) for i in range(self.board_size) for j in range(self.board_size) if state[0][i][j] == 0]
-        print(state)
-        print(empty_positions)
+        empty_positions = [(j, i) for i in range(self.board_size) for j in range(self.board_size) if state[0][i][j] == 0]
+        #print(state)
+        # print(empty_positions)
         if 0 < self.epsilon:
             # ランダムに行動を選ぶ（探索）
             action = empty_positions[np.random.randint(0, len(empty_positions))]  # 空いている位置からランダムに選択
         else:
             # Q値が最大となる行動を選択（活用）
             action = empty_positions[np.argmax(qs[0])]
-            
-            
+
         return action
-
-
-    
 
     def update(self, state, action, reward, next_state, done):
         self.replay_buffer.add(state, action, reward, next_state, done)
@@ -187,7 +187,7 @@ plt.ylabel('Total Reward')
 plt.plot(range(len(reward_history)), reward_history)
 plt.show()
 
-# === 学習済みモデルでCartPoleをプレイ ===
+# === 学習済みモデルでGomokuをプレイ ===
 dqn_agent.load(save_path)  # モデルをロード
 dqn_agent.epsilon = 0  # greedy policy
 state = env.reset()

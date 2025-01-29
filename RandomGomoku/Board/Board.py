@@ -92,6 +92,8 @@ class Board():
             
         print(sboard)
         print(f"Black: {count1} White: {count2}")
-        
+        if not (count1 - count2 == 1 or count1 - count2 == 0):
+            print(count1-count2)    
+            raise ValueError("Invalid board")    
     def copy(self): 
         return self.GetBoardInt()

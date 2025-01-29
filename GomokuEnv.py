@@ -17,22 +17,25 @@ class GomokuEnv:
         self.reset()
 
     def reset(self):
-        self.board.MakeBoard(self.board_size, self.board_size)
+        self.container = Dependency()
+        self.board: Board = self.container.resolve(Board)
+        self.board.MakeBoard(self.board_size,self.board_size)
         self.current_player = 1
         return self.board.copy()
 
     def step(self, action):
         x, y = action
-        print(self.board.GetBoardInt())
-        if self.board.GetBoardInt()[x][y] != 0:
-            raise ValueError("Invalid action: cell already occupied")
+        # print(self.board.GetBoardInt())
+        if self.board.GetBoardInt()[y][x] != 0:
+            # print(y,x)
+            raise ValueError("無効なアクション : 既に埋まっているセル")
         if self.current_player == 1:
             self.stone = Stone.BLACK
         else:
             self.stone = Stone.WHITE
-        print(f"Player {self.current_player} plays {self.stone} at ({x}, {y})")
+        # print(f"Player {self.current_player} plays {self.stone} at ({x}, {y})")
         done = self.board.SetStone(x, y, self.stone)
-        self.board.PrintBoard()
+        # self.board.PrintBoard()
 
         if done:
             reward = 1 if self.current_player == 1 else -1
