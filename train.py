@@ -43,6 +43,7 @@ for episode in range(episodes):
         dqn_agent.update(state, action, reward, next_state, done)
         state = next_state
         total_reward += reward
+        # print('Total Reward:', total_reward)
 
     if episode % sync_interval == 0:
         dqn_agent.sync_qnet()
