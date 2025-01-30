@@ -37,7 +37,6 @@ for episode in range(episodes):
         opponent_agent = DQNAgent()
         opponent_agent.load(save_path)
         win_history.clear()  # リセットして再スタート
-        opponent_agent = RandomAgent()
 
 
     # 先手後手を交互に設定
