@@ -46,7 +46,6 @@ while not done:
     print('Current State:')
     env.render()
     if done:
-        env.board.PrintFinalBoard()
         break
    
     

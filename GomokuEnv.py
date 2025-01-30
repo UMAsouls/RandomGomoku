@@ -20,15 +20,15 @@ class GomokuEnv:
             self.train_player = 1
         else:
             self.train_player = 2
-        self.reset()
+        
 
     def reset(self):
-        self.container = Dependency()
-        self.board: Board = self.container.resolve(Board)
-        self.board.MakeBoard(self.board_size, self.board_size)
-        self.current_player = 1
-        self.blackStones = 0
-        self.whiteStones = 0
+        # self.container = Dependency()
+        # self.board: Board = self.container.resolve(Board)
+        # self.board.MakeBoard(self.board_size, self.board_size)
+        # self.current_player = 1
+        # self.blackStones = 0
+        # self.whiteStones = 0
         return self.board.copy()
 
     def step(self, action):
@@ -38,17 +38,19 @@ class GomokuEnv:
         
         if self.current_player == 1:
             self.stone = Stone.BLACK
+            self.blackStones += 1
+            
         else:
             self.stone = Stone.WHITE
+            self.whiteStones += 1
+            
 
         done = self.board.SetStone(x, y, self.stone)
         
-        if self.stone == Stone.BLACK:
-            self.blackStones += 1
-        else:
-            self.whiteStones += 1
         
         if not(self.blackStones-self.whiteStones == 1 or self.blackStones == self.whiteStones):
+            print(self.blackStones)
+            print(self.whiteStones)
             raise ValueError("石の数がおかしいです")
 
         # 報酬の初期設定
@@ -56,6 +58,7 @@ class GomokuEnv:
 
         # ゲームが終了した場合
         if done:
+            self.board.PrintBoard()
             if self.current_player == self.train_player:
                 reward += 10000  # 黒が勝った
             else:
@@ -73,6 +76,8 @@ class GomokuEnv:
         # 次のプレイヤーに交代
         self.current_player = 3 - self.current_player
 
+
+        
         return self.board.copy(), reward, done, {}
 
     def evaluate_action(self, x, y):
