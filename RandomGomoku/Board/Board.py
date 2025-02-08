@@ -65,7 +65,7 @@ class Board():
         self.__width = w
         self.__height = h
         
-        # self.RandomSet()
+        self.RandomSet()
         
         
     def GetBoardInt(self) -> list[list[int]]:
