@@ -59,20 +59,20 @@ print('Initial State:')
    
 
 #human vs rule_based
-# while not done:
-#     if env.current_player == env.train_player:
-#         action = env.get_human_action()
-#     else:
-#         action = rule_based_agent.get_action(state,env.current_player)
-#     next_state, reward, done, info = env.step(action)
-#     env.current_player = 3 - env.current_player
-#     state = next_state
-#     total_reward += reward
-#     print('Total Reward:', total_reward)
-#     print('Current State:')
-#     env.render()
-#     if done:
-#         break
+while not done:
+    if env.current_player == env.train_player:
+        action = env.get_human_action()
+    else:
+        action = rule_based_agent.get_action(state,env.current_player)
+    next_state, reward, done, info = env.step(action)
+    env.current_player = 3 - env.current_player
+    state = next_state
+    total_reward += reward
+    print('Total Reward:', total_reward)
+    print('Current State:')
+    env.render()
+    if done:
+        break
 
 #ai vs rule_based
 while not done:
