@@ -1,6 +1,6 @@
 from dqn import DQNAgent
 import GomokuEnv
-from  dqn import RandomAgent
+from  agent import RandomAgent
 from GomokuEnv import Stone
 
 random_agent = RandomAgent()

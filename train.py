@@ -3,11 +3,10 @@ import numpy as np
 import GomokuEnv
 import RandomGomoku
 from dqn import DQNAgent
-from dqn import RandomAgent
 import GomokuEnv
 from GomokuEnv import Stone
 from collections import deque  # 追加
-
+from agent import RandomAgent  # 追加
 save_path = './dqn_model'
 
 # === Main ===
