@@ -53,8 +53,12 @@ for episode in range(episodes):
     total_reward = 0
 
     while not done:
+        
         action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state, env.current_player)
-
+        if env.current_player == env.train_player:
+            print("train_agent")
+        else:
+            print("opponent_agent")
         next_state, reward, done, info = env.step(action)
         # 次のプレイヤーに交代
         env.current_player = 3 - env.current_player
@@ -74,7 +78,7 @@ for episode in range(episodes):
 
     reward_history.append(total_reward)
     win_rate = sum(win_history) / len(win_history) if win_history else 0  # 直近50試合の勝率
-    if win_rate > win_rate_threshold:
+    if win_rate > win_rate_threshold and episode > 30:
         train_agent.save(save_path)
         break
     percentage_history.append(win_rate)

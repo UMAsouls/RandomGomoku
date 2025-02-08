@@ -16,7 +16,16 @@ class RuleBasedAgent:
         pass
     
     def get_action(self, state, player_stone):
-        positions = [(i, j) for i in range(19) for j in range(19) if state[i][j] == 0]
+        already_placed = [(j, i) for i in range(19) for j in range(19) if state[i][j] != 0]
+        positions = []
+        for i, j in already_placed:
+            for i_offset in range(-1, 2):
+                for j_offset in range(-1, 2):
+                    if i_offset == 0 and j_offset == 0:
+                        continue
+                    if 0 <= i + i_offset < 19 and 0 <= j + j_offset < 19 and state[i + i_offset][j + j_offset] == 0:
+                        positions.append((j + j_offset,i + i_offset ))
+    
         random.shuffle(positions)  # 探索順序をランダム化
         
         for i, j in positions:
@@ -39,6 +48,8 @@ class RuleBasedAgent:
         
     def check_three_in_a_row(self, state, i, j, player_stone):
         """相手が3つ並べているかどうかを判定し、その手を阻止する"""
+        if state[i][j] != 0:  # 既に石があるかを確認
+            return False
         # 一時的に石を置いて3つ並びができるか確認
         state[i][j] = player_stone
         three_in_a_row = (
@@ -73,6 +84,8 @@ class RuleBasedAgent:
         return False
     
     def check_win(self, state, i, j, player_stone):
+        if state[i][j] != 0:  # 既に石があるかを確認
+            return False
         #player_stone=1:先手,2:後手
         #石を打って勝てるかどうかを判定する
         #石を打つ
