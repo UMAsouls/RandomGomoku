@@ -7,29 +7,22 @@ import numpy as np
 from RandomGomoku.const import Stone
 
 class GomokuEnv:
-    def __init__(self, board_size=19, stone=Stone.BLACK):
+    def __init__(self, board_size=19,train_target = "first"):
         self.board_size = board_size
         self.container = Dependency()
         self.board: Board = self.container.resolve(Board)
         self.board.MakeBoard(board_size, board_size)
-        self.stone = stone
+        self.stone = Stone.BLACK
         self.current_player = 1
         self.blackStones = 0
         self.whiteStones = 0
-        if self.stone == Stone.BLACK:
+        if train_target == "first":
             self.train_player = 1
-        else:
+        elif train_target == "second":
             self.train_player = 2
-        
+        else:
+            raise ValueError("train_targetはfirstかsecondを指定してください")
 
-    def reset(self):
-        # self.container = Dependency()
-        # self.board: Board = self.container.resolve(Board)
-        # self.board.MakeBoard(self.board_size, self.board_size)
-        # self.current_player = 1
-        # self.blackStones = 0
-        # self.whiteStones = 0
-        return self.board.copy()
 
     def step(self, action):
         x, y = action
@@ -72,9 +65,6 @@ class GomokuEnv:
             # 石を置いた位置に基づく報酬（戦略的な位置）
             strategic_reward = self.evaluate_strategic_position(x, y)
             reward += strategic_reward
-
-        # 次のプレイヤーに交代
-        self.current_player = 3 - self.current_player
 
 
         

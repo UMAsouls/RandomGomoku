@@ -11,7 +11,7 @@ from collections import deque  # 追加
 save_path = './dqn_model'
 
 # === Main ===
-episodes = 50000000
+episodes = 100
 sync_interval = 20
 env = None
 
@@ -21,35 +21,44 @@ opponent_agent = RandomAgent()
 
 reward_history = []
 percentage_history = []
-win_history = deque(maxlen=50)  # 直近50試合の結果を保存するキュー
+win_history_maxlen = 50
+win_history = deque(maxlen=win_history_maxlen)  # 直近50試合の結果を保存するキュー
 train_target_win = 0
 opponent_win = 0
-count = 0
+
+#勝ち越し率の基準
+win_rate_threshold = 0.75
+
+
 
 # 学習の実行
 for episode in range(episodes):
-    # 直近50試合の勝率を計算
-    if len(win_history) == 50 and sum(win_history) / 50 > 0.75:
-        count += 1
-        train_agent.save(save_path)
-        train_agent = DQNAgent()
-        train_agent.load(save_path)
-        opponent_agent = DQNAgent()
-        opponent_agent.load(save_path)
-        win_history.clear()  # リセットして再スタート
+    # # 直近50試合の勝率を計算
+    # ここのコードは自動である程度の勝率を超えたら相手のモデルを更新するようにする
+    # しかしうまくいってません
+    # if len(win_history) == win_history_maxlen and sum(win_history) / win_history_maxlen > win_rate_threshold:
+    #     train_agent.save(save_path)
+    #     train_agent = DQNAgent()
+    #     train_agent.load(save_path)
+    #     opponent_agent = DQNAgent()
+    #     opponent_agent.load(save_path)
+    #     win_history.clear()  # リセットして再スタート
 
 
     # 先手後手を交互に設定
-    env = GomokuEnv.GomokuEnv(stone=Stone.BLACK if episode % 2 == 0 else Stone.WHITE)
+    env = GomokuEnv.GomokuEnv(train_target="first" if episode % 2 == 0 else "second")
 
-    state = env.reset()
+    state = env.board.copy()
     done = False
     total_reward = 0
 
     while not done:
         action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state)
-        next_state, reward, done, info = env.step(action)
 
+        next_state, reward, done, info = env.step(action)
+        # 次のプレイヤーに交代
+        env.current_player = 3 - env.current_player
+        
         if done:
             is_win = env.current_player != env.train_player  # 学習エージェントが勝ったかどうか
             win_history.append(1 if is_win else 0)  # 勝ちなら1、負けなら0を追加
@@ -60,7 +69,7 @@ for episode in range(episodes):
         state = next_state
         total_reward += reward
 
-    if episode % sync_interval == 0:
+    if episode % sync_interval == 10:
         train_agent.sync_qnet()
 
     reward_history.append(total_reward)
