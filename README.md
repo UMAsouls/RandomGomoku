@@ -17,7 +17,7 @@ python play.py
 # 各ファイルについて
 ```
 .
-├── GomokuEnv.py
+├── GomokuEnv.py #学習環境です　評価＆報酬関数等あるので高頻度でさわると思います
 ├── README.md
 ├── RandomGomoku #五目並べゲーム本体
 │   ├── Board #学習コード書くときは基本ここ見ておけばおｋ
