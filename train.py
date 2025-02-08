@@ -7,16 +7,17 @@ import GomokuEnv
 from GomokuEnv import Stone
 from collections import deque  # 追加
 from agent import RandomAgent  # 追加
+from agent import RuleBasedAgent  
 save_path = './dqn_model'
 
 # === Main ===
-episodes = 100
+episodes = 1000000
 sync_interval = 20
 env = None
 
 # 初期エージェントの設定
 train_agent = DQNAgent()
-opponent_agent = RandomAgent()
+opponent_agent = RuleBasedAgent()
 
 reward_history = []
 percentage_history = []
@@ -26,7 +27,7 @@ train_target_win = 0
 opponent_win = 0
 
 #勝ち越し率の基準
-win_rate_threshold = 0.75
+win_rate_threshold = 0.8
 
 
 
@@ -52,7 +53,7 @@ for episode in range(episodes):
     total_reward = 0
 
     while not done:
-        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state)
+        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state, env.current_player)
 
         next_state, reward, done, info = env.step(action)
         # 次のプレイヤーに交代
@@ -68,11 +69,14 @@ for episode in range(episodes):
         state = next_state
         total_reward += reward
 
-    if episode % sync_interval == 10:
+    if episode % sync_interval == 0:
         train_agent.sync_qnet()
 
     reward_history.append(total_reward)
     win_rate = sum(win_history) / len(win_history) if win_history else 0  # 直近50試合の勝率
+    if win_rate > win_rate_threshold:
+        train_agent.save(save_path)
+        break
     percentage_history.append(win_rate)
 
     if episode % 1 == 0:
