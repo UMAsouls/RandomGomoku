@@ -123,8 +123,11 @@ class Mass(IMass,CreatingMass):
         
         
     def Count(self, dir: tuple[int,int], count:int, kind: Stone) -> int:
-        if(kind != self.stone or self.__around[dir[1]][dir[0]] == None): 
+        if(kind != self.stone ): 
             return count
+        
+        if(self.__around[dir[1]][dir[0]] == None): 
+            return count + 1
         
         return self.__around[dir[1]][dir[0]].Count(dir,count+1,kind)
         
