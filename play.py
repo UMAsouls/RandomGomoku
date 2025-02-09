@@ -91,7 +91,6 @@ for episode in range(episodes):
         else:
             print('rule_based Agent')
             action = rule_based_agent.get_action(state,env.current_player)  # DQNエージェントのターン
-        print("state",state)
         next_state, reward, done, info = env.step(action)
         env.current_player = 3 - env.current_player
         state = next_state
