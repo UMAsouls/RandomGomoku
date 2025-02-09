@@ -4,6 +4,7 @@ from  agent import RandomAgent
 from GomokuEnv import Stone
 from agent import RuleBasedAgent
 from agent import MinimaxAgent
+
 random_agent = RandomAgent()
 dqn_agent = DQNAgent()
 rule_based_agent = RuleBasedAgent()
@@ -21,23 +22,9 @@ state = env.board.copy()
 done = False
 total_reward = 0
 print('Initial State:')
-#ai vs human
-# while not done:
-#     if env.current_player == env.train_player:
-#         action = dqn_agent.get_action(state)  # DQNエージェントのターン
-#     else:
-#         action = env.get_human_action()
-#     next_state, reward, done, info = env.step(action)
-#     env.current_player = 3 - env.current_player
-#     state = next_state
-#     total_reward += reward
-#     print('Total Reward:', total_reward)
-#     print('Current State:')
-#     env.render()
-#     if done:
-#         break
 
 #ai vs random
+# env.render()
 
 # while not done:
 #     if env.current_player == env.train_player:
@@ -58,32 +45,43 @@ print('Initial State:')
 #     env.render()
    
 
-#human vs rule_based
-while not done:
-    if env.current_player == env.train_player:
-        action = env.get_human_action()
-    else:
-        action = rule_based_agent.get_action(state,env.current_player)
-    next_state, reward, done, info = env.step(action)
-    env.current_player = 3 - env.current_player
-    state = next_state
-    total_reward += reward
-    print('Total Reward:', total_reward)
-    print('Current State:')
-    env.render()
-    if done:
-        break
+
 
 #ai vs rule_based
+# env.render()
+# while not done:
+#     if env.current_player == 1:
+#         print('Rule Based Agent')
+        
+#         action = rule_based_agent.get_action(state,env.current_player)
+#     else:
+#         print('minimax Agent')
+#         action = minimax_agent.get_action(state,env.current_player)  # DQNエージェントのターン
+#     print("state",state)
+#     next_state, reward, done, info = env.step(action)
+#     env.current_player = 3 - env.current_player
+#     state = next_state
+#     total_reward += reward
+#     print('Total Reward:', total_reward)
+#     print('Current State:')
+#     env.render()
+#     if done:
+#         print('Game Over')
+#         if env.current_player == 2:
+#             print('first Win')
+#         else:
+#             print('second Win')
+#         break
+# minimax vs minimax
+env.render()
 while not done:
     if env.current_player == 1:
-        print('Rule Based Agent')
-        
-        action = rule_based_agent.get_action(state,env.current_player)
+        print('minimax Agent')
+        action = minimax_agent.get_action(state,env.current_player)
     else:
         print('minimax Agent')
-        action = minimax_agent.get_action(state,env.current_player)  # DQNエージェントのターン
-        
+        action = rule_based_agent.get_action(state,env.current_player)  # DQNエージェントのターン
+    print("state",state)
     next_state, reward, done, info = env.step(action)
     env.current_player = 3 - env.current_player
     state = next_state
@@ -97,6 +95,6 @@ while not done:
             print('first Win')
         else:
             print('second Win')
-        break
-    
+
+
 print('Total Reward:', total_reward)
