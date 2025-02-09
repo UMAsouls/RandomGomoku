@@ -18,6 +18,8 @@ env = None
 # 初期エージェントの設定
 train_agent = DQNAgent()
 opponent_agent = RuleBasedAgent()
+#opponent_agent = RandomAgent()
+#opponent_agent = MinimaxAgent()
 
 reward_history = []
 percentage_history = []
