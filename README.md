@@ -10,6 +10,11 @@ python train.py
 
 ## 自分やagentと対戦させたい場合
 対戦できますが、コードのコメントアウト等をいじって対戦相手を決定してください。
+### vsHuman
+```
+python GUI.py
+```
+### agent vs agent
 ```
 python play.py
 ```
@@ -17,6 +22,7 @@ python play.py
 # 各ファイルについて
 ```
 .
+├── GUI.py #人間がプレイする用 
 ├── GomokuEnv.py #学習環境です　評価＆報酬関数等あるので高頻度でさわると思います
 ├── README.md
 ├── RandomGomoku #五目並べゲーム本体
@@ -46,7 +52,7 @@ python play.py
 │   └── qnet.npz
 ├── function.md # RandomGomokuの基本的な関数がまとめられてる
 ├── main.py # RandomGomokuを試すためのファイル
-├── play.py # つくったagent等と戦うためのファイル
+├── play.py # 作ったagent同士が戦うためのファイル
 ├── pyproject.toml
 └── train.py　# 学習実行用
 ```
