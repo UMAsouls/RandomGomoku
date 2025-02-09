@@ -75,7 +75,7 @@ print('Initial State:')
 # minimax vs rule_based
 first_win = 0
 second_win = 0
-episodes = 50
+episodes = 10
 
 for episode in range(episodes):
     
@@ -90,24 +90,23 @@ for episode in range(episodes):
             action = minimax_agent.get_action(state,env.current_player)
         else:
             print('rule_based Agent')
-            action = rule_based_agent.get_action(state,env.current_player)  # DQNエージェントのターン
+            action = minimax_agent.get_action(state,env.current_player)
+
         next_state, reward, done, info = env.step(action)
         env.current_player = 3 - env.current_player
         state = next_state
         total_reward += reward
-        print('Total Reward:', total_reward)
-        print('Current State:')
-        env.render()
+        # print('Total Reward:', total_reward)
+        # print('Current State:')
+        # env.render()
         if done:
             print('Game Over')
-            if env.current_player == 2:
-                print('first Win')
+            is_win = env.current_player != env.train_player  # 学習エージェントが勝ったかどうか
+            if is_win:
                 first_win += 1
-                break
             else:
-                print('second Win')
                 second_win += 1
-                break
+            
 print(f"first win: {first_win}, first win rate: {first_win/episodes}  second win: {second_win}, second win rate: {second_win/episodes}")
 
 

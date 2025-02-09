@@ -1,6 +1,6 @@
 
 import random
-
+import time
 class RandomAgent:
     def __init__(self):
         pass
@@ -136,11 +136,10 @@ class RuleBasedAgent:
                 if all(state[i + k][j - k] == player_stone for k in range(5)):
                     return True
         return False
-    
-import random
+
 
 class MinimaxAgent:
-    def __init__(self, depth=2):
+    def __init__(self, depth=3):
         self.depth = depth  # 最大探索深さ
     
     def get_action(self, state, player_stone):
@@ -149,56 +148,41 @@ class MinimaxAgent:
         alpha = float('-inf')
         beta = float('inf')
 
-        already_placed = [(j, i) for i in range(19) for j in range(19) if state[i][j] != 0]
-        positions = []
-        for i, j in already_placed:
-            for i_offset in range(-1, 2):
-                for j_offset in range(-1, 2):
-                    if i_offset == 0 and j_offset == 0:
-                        continue
-                    if 0 <= i + i_offset < 19 and 0 <= j + j_offset < 19 and state[i + i_offset][j + j_offset] == 0:
-                        positions.append((j + j_offset,i + i_offset ))
-    
-        random.shuffle(positions)  # 探索順序をランダム化
+        # 石が置かれた場所の隣接マスを候補にする
+        positions = self.get_candidate_positions(state)
+        # time_start = time.time()
+
+        for i, j in positions:
+            state[i][j] = player_stone  # 仮に石を置く
+            if self.check_win(state, player_stone, (i, j)):
+                state[i][j] = 0
+                return (j, i)  # 勝利状態ならその手を返す
+            elif self.check_win(state, 3 - player_stone, (i, j)):
+                state[i][j] = 0
+                return (j, i)  # 相手の勝利状態ならその手を返す
+            score = self.minimax(state, self.depth - 1, False, alpha, beta, player_stone, (i, j))
+            
+            state[i][j] = 0  # 元に戻す
+            if score > best_score:
+                best_score = score
+                best_action = (j, i)
         
-        for i,j in positions:
-            if state[i][j] == 0:  # 空きマスのみ探索
-                state[i][j] = player_stone  # 仮に石を置く
-                score = self.minimax(state, self.depth - 1, False, alpha, beta, player_stone)
-                state[i][j] = 0  # 元に戻す
-                if score > best_score:
-                    best_score = score
-                    best_action = (j, i)
-        
+            # print("get_candidate_positions time:",time.time()-time_start)
         return best_action if best_action else random.choice([(i, j) for i in range(19) for j in range(19) if state[i][j] == 0])
 
-    def minimax(self, state, depth, is_maximizing, alpha, beta, player_stone):
+    def minimax(self, state, depth, is_maximizing, alpha, beta, player_stone, last_move):
         opponent_stone = 3 - player_stone
-        if self.check_win(state, player_stone):
-            return 10000  # 勝利状態
-        if self.check_win(state, opponent_stone):
-            return -10000  # 相手の勝利状態
-        if depth == 0 or all(state[i][j] != 0 for i in range(19) for j in range(19)):
-            return self.evaluate_state(state, player_stone)
 
-        # 動的に positions を生成（隣接する空きマス）
-        already_placed = [(i, j) for i in range(19) for j in range(19) if state[i][j] != 0]
-        positions = []
-        for i, j in already_placed:
-            for i_offset in range(-1, 2):
-                for j_offset in range(-1, 2):
-                    if i_offset == 0 and j_offset == 0:
-                        continue
-                    if 0 <= i + i_offset < 19 and 0 <= j + j_offset < 19 and state[i + i_offset][j + j_offset] == 0:
-                        positions.append((i + i_offset, j + j_offset))
+        if depth == 0:
+            return self.evaluate_state(state, player_stone, last_move)
 
-        random.shuffle(positions)  # 探索順序をランダム化
+        positions = self.get_candidate_positions(state)
 
         if is_maximizing:
             best_score = float('-inf')
             for i, j in positions:
                 state[i][j] = player_stone
-                score = self.minimax(state, depth - 1, False, alpha, beta, player_stone)
+                score = self.minimax(state, depth - 1, False, alpha, beta, player_stone, (i, j))
                 state[i][j] = 0
                 best_score = max(best_score, score)
                 alpha = max(alpha, best_score)
@@ -209,7 +193,7 @@ class MinimaxAgent:
             best_score = float('inf')
             for i, j in positions:
                 state[i][j] = opponent_stone
-                score = self.minimax(state, depth - 1, True, alpha, beta, player_stone)
+                score = self.minimax(state, depth - 1, True, alpha, beta, player_stone, (i, j))
                 state[i][j] = 0
                 best_score = min(best_score, score)
                 beta = min(beta, best_score)
@@ -217,53 +201,62 @@ class MinimaxAgent:
                     break  # αカット
             return best_score
 
-
-
-    def evaluate_state(self, state, player_stone):
-        """ 改良された評価関数 """
+    def evaluate_state(self, state, player_stone, last_move):
+        """ おいた石の周囲のみ評価する """
         opponent_stone = 3 - player_stone
         score = 0
+        x, y = last_move
         
-        if self.check_win(state, player_stone):
+        if self.check_win(state, player_stone, last_move):
             return 10000
-        if self.check_win(state, opponent_stone):
+        if self.check_win(state, opponent_stone, last_move):
             return -10000
-        
+
         # 自分の連続石に応じたスコア加算
-        score += self.count_consecutive(state, player_stone, 2) * 5
-        score += self.count_consecutive(state, player_stone, 3) * 20
-        score += self.count_consecutive(state, player_stone, 4) * 100
-        score += self.count_consecutive(state, player_stone, 5) * 10000  # 勝利状態
+        score += self.count_consecutive(state, player_stone, 2, x, y) * 5
+        score += self.count_consecutive(state, player_stone, 3, x, y) * 20
+        score += self.count_consecutive(state, player_stone, 4, x, y) * 100
 
         # 相手の連続石に応じたスコア減算（相手の強い状態を阻止）
-        score -= self.count_consecutive(state, opponent_stone, 2) * 10
-        score -= self.count_consecutive(state, opponent_stone, 3) * 500
-        score -= self.count_consecutive(state, opponent_stone, 4) * 1000
-        score -= self.count_consecutive(state, opponent_stone, 5) * 10000  # 相手の勝利状態は大幅ペナルティ
-
-        #端においたらスコアを下げる
-        if state[0][0] == player_stone or state[0][18] == player_stone or state[18][0] == player_stone or state[18][18] == player_stone:
-            score -= 100
+        score -= self.count_consecutive(state, opponent_stone, 2, x, y) * 10
+        score -= self.count_consecutive(state, opponent_stone, 3, x, y) * 500
+        score -= self.count_consecutive(state, opponent_stone, 4, x, y) * 10000
 
         return score
 
-
-    def count_consecutive(self, state, player_stone, count):
-        """縦・横・斜めに指定された個数が連続しているパターンを数える"""
+    def count_consecutive(self, state, player_stone, count, x, y):
+        """ 指定した位置 (x, y) を中心に縦・横・斜めで連続する石の数を数える """
         total = 0
-        already_placed = [(i, j) for i in range(19) for j in range(19) if state[i][j] != 0]
-        for i, j in already_placed:
-            if j + count <= 19 and all(state[i][j + k] == player_stone for k in range(count)):
-                total += 1
-            if i + count <= 19 and all(state[i + k][j] == player_stone for k in range(count)):
-                total += 1
-            if i + count <= 19 and j + count <= 19 and all(state[i + k][j + k] == player_stone for k in range(count)):
-                total += 1
-            if i + count <= 19 and j - count >= -1 and all(state[i + k][j - k] == player_stone for k in range(count)):
-                total += 1
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]  # 縦・横・右下・左下方向
+        for dx, dy in directions:
+            consecutive = 0
+            for d in range(-count + 1, count):
+                nx, ny = x + d * dx, y + d * dy
+                if 0 <= nx < 19 and 0 <= ny < 19 and state[nx][ny] == player_stone:
+                    consecutive += 1
+                    if consecutive == count:
+                        total += 1
+                        break
+                else:
+                    consecutive = 0
         return total
 
+    def check_win(self, state, player_stone, last_move):
+        """ おいた石の周囲のみを確認して勝利判定を行う """
+        return self.count_consecutive(state, player_stone, 5, *last_move) > 0
 
-    def check_win(self, state, player_stone):
-        """ 5連があるかを確認 """
-        return self.count_consecutive(state, player_stone, 5) > 0
+    def get_candidate_positions(self, state):
+        positions = []
+        visited = [[False] * 19 for _ in range(19)]
+
+        for i in range(19):
+            for j in range(19):
+                if state[i][j] != 0:  # 石が置かれている位置の周囲だけ探索
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            ni, nj = i + dx, j + dy
+                            if 0 <= ni < 19 and 0 <= nj < 19 and state[ni][nj] == 0 and not visited[ni][nj]:
+                                visited[ni][nj] = True
+                                positions.append((ni, nj))
+        return positions
+

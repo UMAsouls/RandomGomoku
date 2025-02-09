@@ -8,6 +8,7 @@ from GomokuEnv import Stone
 from collections import deque  # 追加
 from agent import RandomAgent  # 追加
 from agent import RuleBasedAgent  
+from agent import MinimaxAgent
 save_path = './dqn_model'
 
 # === Main ===
@@ -17,9 +18,9 @@ env = None
 
 # 初期エージェントの設定
 train_agent = DQNAgent()
-opponent_agent = RuleBasedAgent()
+# opponent_agent = RuleBasedAgent()
 #opponent_agent = RandomAgent()
-#opponent_agent = MinimaxAgent()
+opponent_agent = MinimaxAgent()
 
 reward_history = []
 percentage_history = []
