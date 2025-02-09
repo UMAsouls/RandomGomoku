@@ -11,13 +11,13 @@ python train.py
 ## 自分やagentと対戦させたい場合
 対戦できますが、コードのコメントアウト等をいじって対戦相手を決定してください。
 ```
-play.py
+python play.py
 ```
 
 # 各ファイルについて
 ```
 .
-├── GomokuEnv.py
+├── GomokuEnv.py #学習環境です　評価＆報酬関数等あるので高頻度でさわると思います
 ├── README.md
 ├── RandomGomoku #五目並べゲーム本体
 │   ├── Board #学習コード書くときは基本ここ見ておけばおｋ
