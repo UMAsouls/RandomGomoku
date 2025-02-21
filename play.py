@@ -72,6 +72,8 @@ print('Initial State:')
 #         else:
 #             print('second Win')
 #         break
+
+
 # minimax vs rule_based
 first_win = 0
 second_win = 0

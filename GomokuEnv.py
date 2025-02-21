@@ -40,7 +40,7 @@ class GomokuEnv:
 
         done = self.board.SetStone(x, y, self.stone)
         
-        
+        #石の数が正常かチェック
         if not(self.blackStones-self.whiteStones == 1 or self.blackStones == self.whiteStones):
             print(self.blackStones)
             print(self.whiteStones)

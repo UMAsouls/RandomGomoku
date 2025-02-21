@@ -7,10 +7,11 @@ from GomokuEnv import Stone
 from agent import RuleBasedAgent
 from agent import MinimaxAgent
 #humanが先行なら"first"、後攻なら"second"を入れてください
-env = GomokuEnv.GomokuEnv(train_target="first")
+env = GomokuEnv.GomokuEnv(train_target="second")
 #任意のエージェントを選択してください
 opponent_agent = MinimaxAgent()
 # opponent_agent = RuleBasedAgent()
+# opponent_agent = DQNAgent()
 
 
 

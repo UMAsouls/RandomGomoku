@@ -71,7 +71,7 @@ class DQNAgent:
         state = np.array(state)
         state = state[np.newaxis, :]  # (1, 19, 19)に変換
         state_flat = state.reshape(state.shape[0], -1)  # (1, 361)に変換
-
+        
         qs = self.qnet(state_flat)  # Q値の計算
         qs = qs.data[0]  # (1, 361) → (361,)
 

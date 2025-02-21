@@ -12,15 +12,15 @@ from agent import MinimaxAgent
 save_path = './dqn_model'
 
 # === Main ===
-episodes = 1000000
+episodes = 50
 sync_interval = 20
 env = None
 
 # 初期エージェントの設定
 train_agent = DQNAgent()
 # opponent_agent = RuleBasedAgent()
-#opponent_agent = RandomAgent()
-opponent_agent = MinimaxAgent()
+opponent_agent = RandomAgent()
+# opponent_agent = MinimaxAgent()
 
 reward_history = []
 percentage_history = []
@@ -36,16 +36,7 @@ win_rate_threshold = 0.8
 
 # 学習の実行
 for episode in range(episodes):
-    # # 直近50試合の勝率を計算
-    # ここのコードは自動である程度の勝率を超えたら相手のモデルを更新するようにする
-    # しかしうまくいってません
-    # if len(win_history) == win_history_maxlen and sum(win_history) / win_history_maxlen > win_rate_threshold:
-    #     train_agent.save(save_path)
-    #     train_agent = DQNAgent()
-    #     train_agent.load(save_path)
-    #     opponent_agent = DQNAgent()
-    #     opponent_agent.load(save_path)
-    #     win_history.clear()  # リセットして再スタート
+
 
 
     # 先手後手を交互に設定
@@ -57,7 +48,7 @@ for episode in range(episodes):
 
     while not done:
         
-        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state, env.current_player)
+        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state)
         if env.current_player == env.train_player:
             print("train_agent")
         else:
