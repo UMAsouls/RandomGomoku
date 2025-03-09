@@ -12,15 +12,15 @@ from agent import MinimaxAgent
 save_path = './dqn_model'
 
 # === Main ===
-episodes = 50
+episodes = 1000
 sync_interval = 20
 env = None
 
 # 初期エージェントの設定
 train_agent = DQNAgent()
-# opponent_agent = RuleBasedAgent()
+#opponent_agent = RuleBasedAgent()
 opponent_agent = RandomAgent()
-# opponent_agent = MinimaxAgent()
+#opponent_agent = MinimaxAgent()
 
 reward_history = []
 percentage_history = []

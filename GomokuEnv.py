@@ -125,11 +125,11 @@ class GomokuEnv:
 
         # 攻撃パターン（5連続の石や4連続の石を作る）
         if stone_count == 5:
-            return 10000  # 完全に勝ちを確定させる場合
+            return 10000 # 完全に勝ちを確定させる場合
         if stone_count == 4 and empty_count == 1:
             return 5000  # 4連続を作れる場合
         if stone_count == 3 and empty_count == 2:
-            return 1000  # 3連続を作れる場合
+            return 1000  #pytho 3連続を作れる場合
         if stone_count == 2 and empty_count == 3:
             return 500
 
@@ -149,13 +149,34 @@ class GomokuEnv:
     def evaluate_strategic_position(self, x, y):
         """
         戦略的な位置に置かれた石に対する報酬
-        中央に近いほど高い価値をつける
+        - 後手（白）の場合：相手（黒）の石に近いほど報酬が高い
+        - 先手（黒）の場合：自分の前の手に近いほど報酬が高い
         """
-        center_x, center_y = self.board_size // 2, self.board_size // 2
-        distance = abs(center_x - x) + abs(center_y - y)  # 中心からの距離を計算
+        if self.current_player == 2:  # 後手（白）の場合
+            target_stone = Stone.BLACK  # 相手（黒）の石をターゲットにする
+        else:  # 先手（黒）の場合
+            target_stone = self.stone  # 自分の石をターゲットにする（前の手を探す）
 
-        # 中央に近いほど高い報酬
-        strategic_score = max(0, 100 - distance)  # 中心からの距離が近いほど報酬が高くなる
+        min_distance = float('inf')
+        last_move = None
+
+        # 盤面を走査し、ターゲット（相手の石 or 自分の前の手）の位置を探す
+        for i in range(self.board_size):
+            for j in range(self.board_size):
+                if self.board.GetBoardInt()[i][j] == target_stone:
+                    distance = abs(i - y) + abs(j - x)  # マンハッタン距離
+                    if self.current_player == 1:  # 先手の場合は最後に置いた手を探す
+                        last_move = (j, i)
+                    min_distance = min(min_distance, distance)
+
+        # 先手の場合、自分の直前の手があるなら距離を再計算
+        if self.current_player == 1 and last_move is not None:
+            last_x, last_y = last_move
+            min_distance = abs(last_y - y) + abs(last_x - x)
+
+        # 距離が短いほど報酬を高くする（最大100点, 最低0点）
+        strategic_score = max(0, 100 - (min_distance * 10))
+
         return strategic_score
 
 
