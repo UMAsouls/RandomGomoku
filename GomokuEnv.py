@@ -64,7 +64,8 @@ class GomokuEnv:
 
             # 石を置いた位置に基づく報酬（戦略的な位置）
             strategic_reward = self.evaluate_strategic_position(x, y)
-            reward += strategic_reward
+            threat_prevention = self.evaluate_threat_prevention(x,y)
+            reward = reward + strategic_reward + threat_prevention
 
 
         
@@ -134,10 +135,10 @@ class GomokuEnv:
             return 500
 
         # 相手の妨害（相手が4つ並べていたら阻止）
-        if opponent_stone_count == 1 and empty_count == 1:
-            return -10000  # 相手の4連続を防ぐ
-        if opponent_stone_count == 2 and empty_count == 1:
-            return -5000  # 相手の3連続を防ぐ
+        #if opponent_stone_count == 1 and empty_count == 1:
+        #    return -10000  # 相手の4連続を防ぐ
+        #if opponent_stone_count == 2 and empty_count == 1:
+        #   return -5000  # 相手の3連続を防ぐ
 
         # 空きスペースの多い連続石は価値が高い
         score = 0
@@ -178,6 +179,48 @@ class GomokuEnv:
         strategic_score = max(0, 100 - (min_distance * 10))
 
         return strategic_score
+    
+    def evaluate_threat_prevention(self, x, y):
+        """
+        相手の勝ち筋を阻止するための評価関数
+        - 相手の石が3つ並んだ場合、その先に置くと報酬を与える (+500)
+        - 相手の石が4つ並んだ場合、その先に置くと報酬を与える (+1000)
+        - 相手の石が4つ並んで両端が開いている場合（四四）はマイナス報酬 (-1500)
+        """
+        opponent_stone = Stone.BLACK if self.current_player == 2 else Stone.WHITE  # 相手の石
+
+        threat_reward = 0
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]  # 横・縦・斜めの4方向
+
+        for dx, dy in directions:
+            count = 0
+            empty_before = False
+            empty_after = False
+
+            for i in range(-4, 5):  # -4から+4の範囲でチェック
+                nx, ny = x + i * dx, y + i * dy
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
+                    stone = self.board.GetBoardInt()[ny][nx]
+                    if stone == opponent_stone:
+                        count += 1
+                    elif stone == 0:
+                        if count == 3 and i > 0:  # 3連続の後ろに空きがある場合
+                            threat_reward += 500  # 相手の3連を防ぐ報酬
+                        elif count == 4 and i > 0:  # 4連続の後ろに空きがある場合
+                            threat_reward += 1000  # 相手の4連を防ぐ報酬
+                        if i == -1:
+                            empty_before = True
+                        elif i == 4:
+                            empty_after = True
+                        count = 0  # 途切れたらリセット
+                    else:
+                        count = 0  # 相手の石以外ならリセット
+
+            # 相手の4連続が両端空いている場合（四四）
+            if empty_before and empty_after:
+                threat_reward -= 1500  # 両端が空いているならマイナス報酬
+
+        return threat_reward
 
 
     def get_human_action(self):
