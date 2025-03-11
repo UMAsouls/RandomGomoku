@@ -48,7 +48,7 @@ for episode in range(episodes):
 
     while not done:
         
-        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state)
+        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state, env.current_player)
         if env.current_player == env.train_player:
             print("train_agent")
         else:
