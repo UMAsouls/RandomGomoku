@@ -19,8 +19,8 @@ env = None
 # 初期エージェントの設定
 train_agent = DQNAgent()
 #opponent_agent = RuleBasedAgent()
-#opponent_agent = RandomAgent()
-opponent_agent = MinimaxAgent()
+opponent_agent = RandomAgent()
+#opponent_agent = MinimaxAgent()
 
 reward_history = []
 percentage_history = []
@@ -28,7 +28,7 @@ win_history_maxlen = 50
 win_history = deque(maxlen=win_history_maxlen)  # 直近50試合の結果を保存するキュー
 train_target_win = 0
 opponent_win = 0
-
+win_rate=0
 #勝ち越し率の基準
 win_rate_threshold = 0.8
 
@@ -37,7 +37,11 @@ win_rate_threshold = 0.8
 # 学習の実行
 for episode in range(episodes):
 
-
+    if(win_rate >= 0.8 and episode >= 50):
+        opponent_agent = MinimaxAgent()
+        print("change random to Minimax")
+        print("---------------------------------------------------------------------------------------------------")
+        print(" ")
 
     # 先手後手を交互に設定
     env = GomokuEnv.GomokuEnv(train_target="first" if episode % 2 == 0 else "second")
@@ -49,10 +53,10 @@ for episode in range(episodes):
     while not done:
         
         action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state,env.current_player)
-        if env.current_player == env.train_player:
-            print("train_agent")
-        else:
-            print("opponent_agent")
+        # if env.current_player == env.train_player:
+        #     print("train_agent")
+        # else:
+        #     print("opponent_agent")
         next_state, reward, done, info = env.step(action)
         # 次のプレイヤーに交代
         env.current_player = 3 - env.current_player
@@ -72,9 +76,9 @@ for episode in range(episodes):
 
     reward_history.append(total_reward)
     win_rate = sum(win_history) / len(win_history) if win_history else 0  # 直近50試合の勝率
-    if win_rate > win_rate_threshold and episode > 30:
-        train_agent.save(save_path)
-        break
+    # if win_rate > win_rate_threshold and episode > 30:
+    #     train_agent.save(save_path)
+    #     break
     percentage_history.append(win_rate)
 
     if episode % 1 == 0:
