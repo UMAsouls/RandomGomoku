@@ -12,7 +12,7 @@ from agent import MinimaxAgent
 save_path = './dqn_model'
 
 # === Main ===
-episodes = 1000
+episodes = 300
 sync_interval = 20
 env = None
 
@@ -37,7 +37,7 @@ win_rate_threshold = 0.8
 # 学習の実行
 for episode in range(episodes):
 
-    if(win_rate >= 0.8 and episode >= 50):
+    if(win_rate >= 0.8 and episode >= 100):
         opponent_agent = MinimaxAgent()
         print("change random to Minimax")
         print("---------------------------------------------------------------------------------------------------")
