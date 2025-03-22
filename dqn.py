@@ -67,7 +67,7 @@ class DQNAgent:
         self.optimizer = optimizers.Adam(self.lr)
         self.optimizer.setup(self.qnet)
 
-    def get_action(self, state):
+    def get_action(self, state,player_stone):
         state = np.array(state)
         state = state[np.newaxis, :]  # (1, 19, 19)に変換
         state_flat = state.reshape(state.shape[0], -1)  # (1, 361)に変換
