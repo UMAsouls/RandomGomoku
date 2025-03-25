@@ -53,19 +53,19 @@ class GomokuEnv:
         if done:
             self.board.PrintBoard()
             if self.current_player == self.train_player:
-                reward += 10000  # 黒が勝った
+                reward += 1  # 黒が勝った
             else:
-                reward += -10000  # 白が勝った
+                reward += -1  # 白が勝った
 
         # ゲームが終了しない場合（続行）
         else:
             # 現在の手の進行具合を考慮して報酬を調整
-            reward += self.evaluate_action(x, y)
+            #reward += self.evaluate_action(x, y)
 
             # 石を置いた位置に基づく報酬（戦略的な位置）
-            strategic_reward = self.evaluate_strategic_position(x, y)
-            threat_prevention = self.evaluate_threat_prevention(x,y)
-            reward = reward + strategic_reward + threat_prevention
+            # strategic_reward = self.evaluate_strategic_position(x, y)
+            # threat_prevention = self.evaluate_threat_prevention(x,y)
+            reward += 0
 
 
         
@@ -135,10 +135,10 @@ class GomokuEnv:
             return 500
 
         # 相手の妨害（相手が4つ並べていたら阻止）
-        #if opponent_stone_count == 1 and empty_count == 1:
-        #    return -10000  # 相手の4連続を防ぐ
-        #if opponent_stone_count == 2 and empty_count == 1:
-        #   return -5000  # 相手の3連続を防ぐ
+        if opponent_stone_count == 1 and empty_count == 1:
+           return -10000  # 相手の4連続を防ぐ
+        if opponent_stone_count == 2 and empty_count == 1:
+          return -5000  # 相手の3連続を防ぐ
 
         # 空きスペースの多い連続石は価値が高い
         score = 0
