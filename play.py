@@ -85,6 +85,7 @@ for episode in range(episodes):
 
     state = env.board.copy()
     done = False
+    total_reward = 0
     env.render()
     while not done:
         if env.current_player == env.train_player:
@@ -97,10 +98,11 @@ for episode in range(episodes):
         next_state, reward, done, info = env.step(action)
         env.current_player = 3 - env.current_player
         state = next_state
-        total_reward += reward
+        if env.current_player == env.train_player:
+            total_reward += reward
         # print('Total Reward:', total_reward)
         # print('Current State:')
-        # env.render()
+        env.render()
         if done:
             print('Game Over')
             is_win = env.current_player != env.train_player  # 学習エージェントが勝ったかどうか
@@ -108,11 +110,10 @@ for episode in range(episodes):
                 first_win += 1
             else:
                 second_win += 1
-            
+        print('Total Reward:', total_reward)
 print(f"first win: {first_win}, first win rate: {first_win/episodes}  second win: {second_win}, second win rate: {second_win/episodes}")
 
 
     
 
 
-print('Total Reward:', total_reward)

@@ -52,11 +52,11 @@ for episode in range(episodes):
 
     while not done:
         
-        action = train_agent.get_action(state) if env.current_player == env.train_player else opponent_agent.get_action(state,env.current_player)
-        # if env.current_player == env.train_player:
-        #     print("train_agent")
-        # else:
-        #     print("opponent_agent")
+        action = train_agent.get_action(state,env.current_player) if env.current_player == env.train_player else opponent_agent.get_action(state, env.current_player)
+        if env.current_player == env.train_player:
+            print("train_agent")
+        else:
+            print("opponent_agent")
         next_state, reward, done, info = env.step(action)
         # 次のプレイヤーに交代
         env.current_player = 3 - env.current_player
