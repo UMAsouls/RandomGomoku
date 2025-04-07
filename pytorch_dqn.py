@@ -62,7 +62,7 @@ class DQNAgent:
         self.lr = 0.0005
         self.epsilon = 0.1
         self.buffer_size = 10000
-        self.batch_size = 128
+        self.batch_size = 32
         self.board_size = 19
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.qnet = QNet(self.board_size * self.board_size)
