@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import GomokuEnv
 import RandomGomoku
-from dqn import DQNAgent
+from pytorch_dqn import DQNAgent
 import GomokuEnv
 from GomokuEnv import Stone
 from collections import deque  # 追加
@@ -53,10 +53,10 @@ for episode in range(episodes):
     while not done:
         
         action = train_agent.get_action(state,env.current_player) if env.current_player == env.train_player else opponent_agent.get_action(state, env.current_player)
-        if env.current_player == env.train_player:
-            print("train_agent")
-        else:
-            print("opponent_agent")
+        # if env.current_player == env.train_player:
+        #     print("train_agent")
+        # else:
+        #     print("opponent_agent")
         next_state, reward, done, info = env.step(action)
         # 次のプレイヤーに交代
         env.current_player = 3 - env.current_player

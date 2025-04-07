@@ -3,7 +3,7 @@ import numpy as np
 import GomokuEnv
 from dqn import DQNAgent
 from collections import deque
-import copy  
+import copy
 
 save_path = './dqn_model'  # 最良モデルの保存場所
 
@@ -45,7 +45,7 @@ for episode in range(episodes):
 
         # 次のプレイヤーに交代
         env.current_player = 3 - env.current_player
-        
+
         if done:
             is_win = env.current_player != env.train_player  # 学習エージェントが勝ったかどうか
             win_history.append(1 if is_win else 0)  # 勝ちなら1、負けなら0を追加
