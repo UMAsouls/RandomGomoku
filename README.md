@@ -2,6 +2,7 @@
 
 ああああ
 いいいい
+22222222
 uuuuuuuuuuuuuuu
 # 学習の流れ
 ## DQNの学習
