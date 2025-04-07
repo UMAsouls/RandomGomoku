@@ -50,7 +50,6 @@ class QNet(Model):
         self.l3 = L.Linear(action_size)
 
     def forward(self, x):
-        #TODO:活性化関数を入れる
         x = x.reshape(x.shape[0], -1)
         x = F.relu(self.l1(x))
         x = F.relu(self.l2(x))

@@ -41,19 +41,23 @@ class ReplayBuffer:
 
         return state, action, reward, next_state, done
 
-# 盤面の状態を入力し、各手のQ値を出力するニューラルネットワーク
+# 盤面の状態を入力し、各手のQ値を出力する畳み込みニューラルネットワーク
 class QNet(nn.Module):
     def __init__(self, action_size):
         super(QNet, self).__init__()
-        self.l1 = nn.Linear(19 * 19, 128)
-        self.l2 = nn.Linear(128, 128)
-        self.l3 = nn.Linear(128, action_size)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.flatten = nn.Flatten()
+        self.fc1 = nn.Linear(64 * 19 * 19, 512)
+        self.fc2 = nn.Linear(512, action_size)
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.l1(x))
-        x = F.relu(self.l2(x))
-        x = torch.tanh(self.l3(x))
+        x = x.unsqueeze(1)  # Add channel dimension
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.flatten(x)
+        x = F.relu(self.fc1(x))
+        x = torch.tanh(self.fc2(x))
         return x
 
 class DQNAgent:
