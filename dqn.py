@@ -16,6 +16,10 @@ from GomokuEnv import Stone
 
 #DQNの経験を保存するバッファ
 class ReplayBuffer:
+    #局面一個一個が保存される
+    #一手一手入ってる
+    #同じゲームから複数の局面をとってくるのはよくない
+    #ゲーム単位の方がいいかも？
     def __init__(self, buffer_size, batch_size):
         self.buffer = deque(maxlen=buffer_size)
         self.batch_size = batch_size
@@ -46,20 +50,22 @@ class QNet(Model):
         self.l3 = L.Linear(action_size)
 
     def forward(self, x):
+        #TODO:活性化関数を入れる
         x = x.reshape(x.shape[0], -1)
         x = F.relu(self.l1(x))
         x = F.relu(self.l2(x))
         x = self.l3(x)
+        x = F.tanh(x)
         return x
 
 
 class DQNAgent:
     def __init__(self):
         self.gamma = 0.98
-        self.lr = 0.0005
+        self.lr = 0.0005 # 学習率 小さすぎるかも? 0.001が一般的かも
         self.epsilon = 0.1
         self.buffer_size = 10000
-        self.batch_size = 32
+        self.batch_size = 32 # バッチサイズ 一度にいくらのデータをいれるか 256 512一般的かも
         self.board_size = 19  # 盤面のサイズ
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.qnet = QNet(self.board_size * self.board_size)  # 空いているマスの数に対応する出力
