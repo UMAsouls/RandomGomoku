@@ -11,14 +11,14 @@ from torch.utils.data import Dataset, DataLoader
 import torch.multiprocessing as mp
 from collections import deque
 from tqdm import tqdm
-from GomokuEnv import GomokuEnv
+from RandomGomoku.GomokuEnv import GomokuEnv
 
 # デバイスの設定
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DualNetwork(nn.Module):
     """方策と価値を出力するニューラルネットワーク"""
-    def __init__(self, board_size, num_channels=64):
+    def __init__(self, board_size, num_channels=256):
         super(DualNetwork, self).__init__()
         self.board_size = board_size
         
@@ -88,7 +88,7 @@ class MCTSNode:
 
 class MCTS:
     """モンテカルロ木探索の実装"""
-    def __init__(self, model, num_simulations=100, c_puct=1.0):
+    def __init__(self, model, num_simulations=800, c_puct=1.0):
         self.model = model
         self.num_simulations = num_simulations
         self.c_puct = c_puct
@@ -229,7 +229,6 @@ class MCTS:
             for x in range(self.board_size):
                 if state[y][x] == 0:  # 空のセル
                     legal_moves.append(y * self.board_size + x)
-        random.shuffle(legal_moves)  # ランダムにシャッフル
         return legal_moves
 
     def _is_terminal(self, state):
@@ -333,7 +332,7 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
     model.eval()
     
     # MCTSの初期化
-    mcts = MCTS(model, num_simulations=30)  # 訓練時は計算量削減のため100回に設定
+    mcts = MCTS(model, num_simulations=100)  # 訓練時は計算量削減のため100回に設定
     
     # 環境の初期化
     env = GomokuEnv(board_size=board_size)
@@ -540,7 +539,7 @@ class AlphaZero:
         model.eval()
         
         # MCTSの初期化
-        mcts = MCTS(model, num_simulations=30)
+        mcts = MCTS(model, num_simulations=100)
         
         for game_idx in game_indices:
             # 環境の初期化
@@ -645,8 +644,8 @@ if __name__ == "__main__":
     # AlphaZeroの初期化
     alpha_zero = AlphaZero(
         board_size=board_size,
-        num_iterations=5,
-        num_self_play_games=20
+        num_iterations=20,
+        num_self_play_games=100
     )
     
     # 訓練を実行

@@ -1,48 +1,42 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import GomokuEnv
-from pytorch_dqn import DQNAgent
+from pytorch_dqn import MCTSAgent  # DQNAgentの代わりにMCTSAgentをインポート
 from collections import deque
 import copy
 
-save_path = './dqn_model'  # 最良モデルの保存場所
-
 # === Main ===
-episodes = 10000
-sync_interval = 20
-
+episodes = 100  # MCTSは計算コストが高いので少なめに設定
 
 # **エージェントの初期化**
-train_agent = DQNAgent()
-opponent_agent = train_agent  # AI同士の対戦、同じQ-networkを使用
+train_agent = MCTSAgent(simulations=50)  # シミュレーション回数は調整可能
 
-
-# **AI vs AI の学習開始**
+# **MCTS vs MCTS の対戦**
 for episode in range(episodes):
-
     # 先手後手を交互に設定
     env = GomokuEnv.GomokuEnv(train_target="first" if episode % 2 == 0 else "second")
-
     state = env.board.copy()
     done = False
     total_reward = 0
 
+
     while not done:
-        # **両者とも同じ Q-network を使う**
+        # MCTSエージェントで行動を選択
         action = train_agent.get_action(state, env.current_player)
-
+        
         next_state, reward, done, info = env.step(action)
-
-        train_agent.update(state, action, reward, next_state, done)
+        
+        # プレイヤー交代（元のコードには明示されていなかった）
+        # if not done:
+        #     env.current_player = 3 - env.current_player
+            
         state = next_state
         total_reward += reward
 
-    if episode % sync_interval == 0:
-        train_agent.sync_qnet()
-        
+    # ゲーム終了時に結果表示
+    print(f"Black: {env.blackStones} White: {env.whiteStones}")
     print(f"episode: {episode}, total reward: {total_reward}")
 
-# モデルの保存
-train_agent.save(save_path)
+# MCTSはモデルを保存する必要がないので、save部分は削除
 
 
