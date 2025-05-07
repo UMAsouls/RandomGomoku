@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import os
+import math
 import GomokuEnv
 from GomokuEnv import Stone
 
@@ -140,3 +141,172 @@ class DQNAgent:
         self.qnet.load_state_dict(torch.load(os.path.join(path, 'qnet.pth'), map_location=self.device))
         self.qnet.to(self.device)
         print(f"Model loaded from {path}")
+
+
+# モンテカルロ木探索のノードクラス
+class MCTSNode:
+    def __init__(self, state, parent=None, action=None, player_stone=None):
+        self.state = copy.deepcopy(state)
+        self.parent = parent
+        self.action = action
+        self.children = []
+        self.visits = 0
+        self.value = 0.0
+        self.player_stone = player_stone
+        
+    def add_child(self, state, action, player_stone):
+        child = MCTSNode(state, self, action, player_stone)
+        self.children.append(child)
+        return child
+        
+    def update(self, result):
+        self.visits += 1
+        self.value += result
+        
+    def fully_expanded(self, valid_actions):
+        return len(self.children) == len(valid_actions)
+    
+    def best_child(self, c_param=1.4):
+        # UCB1アルゴリズムに基づく最良の子ノード選択
+        best_score = float('-inf')
+        best_child = None
+        
+        for child in self.children:
+            # 探索と活用のバランスを取るUCB1スコア計算
+            exploit = child.value / child.visits if child.visits > 0 else 0
+            explore = c_param * math.sqrt(math.log(self.visits) / child.visits) if child.visits > 0 else float('inf')
+            score = exploit + explore
+            
+            if score > best_score:
+                best_score = score
+                best_child = child
+                
+        return best_child
+
+# モンテカルロ木探索エージェント
+class MCTSAgent:
+    def __init__(self, simulations=10000, board_size=19):
+        self.simulations = simulations
+        self.board_size = board_size
+        
+    def get_action(self, state, player_stone):
+        if isinstance(state, torch.Tensor):
+            state = state.detach().cpu().numpy()
+        
+        root = MCTSNode(state, player_stone=player_stone)
+        
+        for _ in range(self.simulations):
+            node = self.select(root)
+            reward = self.simulate(node)
+            self.backpropagate(node, reward)
+        
+        # 最も訪問回数が多い子ノードの行動を選択
+        if not root.children:
+            # 有効な行動がない場合はランダムに選択
+            valid_actions = self.get_valid_actions(state)
+            if valid_actions:
+                return random.choice(valid_actions)
+            return (0, 0)  # フォールバック
+
+        best_child = max(root.children, key=lambda c: c.visits)
+        return best_child.action
+    
+    def select(self, node):
+        # 選択フェーズ: UCBに基づいて最良のノードを選択
+        current = node
+        while current.children:
+            if all(child.visits > 0 for child in current.children):
+                current = current.best_child()
+            else:
+                # 未訪問の子ノードがある場合はそれを選択
+                unexplored = [child for child in current.children if child.visits == 0]
+                return random.choice(unexplored)
+        
+        # 選択したノードを展開
+        valid_actions = self.get_valid_actions(current.state)
+        if valid_actions and not current.fully_expanded(valid_actions):
+            return self.expand(current, valid_actions)
+        
+        return current
+    
+    def expand(self, node, valid_actions):
+        # 展開フェーズ: 新しい子ノードを追加
+        taken_actions = [child.action for child in node.children]
+        possible_actions = [action for action in valid_actions if action not in taken_actions]
+        
+        if not possible_actions:
+            return node
+            
+        action = random.choice(possible_actions)
+        x, y = action
+        new_state = copy.deepcopy(node.state)
+        next_player = 3 - node.player_stone  # 相手の石
+        new_state[y][x] = node.player_stone
+        child = node.add_child(new_state, action, next_player)
+        return child
+    
+    def simulate(self, node):
+        # シミュレーションフェーズ: ランダムプレイアウト
+        state = copy.deepcopy(node.state)
+        current_player = node.player_stone
+        original_player = node.player_stone
+        
+        while True:
+            valid_actions = self.get_valid_actions(state)
+            if not valid_actions:
+                return 0  # 引き分け
+            
+            action = random.choice(valid_actions)
+            x, y = action
+            state[y][x] = current_player
+            
+            # 勝敗チェック
+            if self.check_win(state, current_player, (y, x)):
+                return 1 if current_player == original_player else -1
+            
+            current_player = 3 - current_player
+    
+    def backpropagate(self, node, reward):
+        # バックプロパゲーションフェーズ: 結果を木に反映
+        while node:
+            node.update(reward)
+            node = node.parent
+            reward = -reward  # 親と子で価値を反転
+    
+    def get_valid_actions(self, state):
+        # 有効な行動（空いているマス）を取得
+        valid_actions = []
+        for y in range(self.board_size):
+            for x in range(self.board_size):
+                if state[y][x] == 0:
+                    valid_actions.append((x, y))
+        return valid_actions
+    
+    def check_win(self, state, player_stone, last_move):
+        # 勝利判定（五目並べのルールに従って）
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]  # 横、縦、右下がり、右上がり
+        y, x = last_move
+        
+        for dy, dx in directions:
+            count = 1  # 自分自身をカウント
+            
+            # 正方向に探索
+            for i in range(1, 5):
+                ny, nx = y + i * dy, x + i * dx
+                if 0 <= ny < self.board_size and 0 <= nx < self.board_size and state[ny][nx] == player_stone:
+                    count += 1
+                else:
+                    break
+            
+            # 逆方向に探索
+            for i in range(1, 5):
+                ny, nx = y - i * dy, x - i * dx
+                if 0 <= ny < self.board_size and 0 <= nx < self.board_size and state[ny][nx] == player_stone:
+                    count += 1
+                else:
+                    break
+            
+            if count >= 5:
+                return True
+        
+        return False

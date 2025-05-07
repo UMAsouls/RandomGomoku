@@ -1,6 +1,7 @@
 import pygame
 import sys
 from dqn import DQNAgent
+from pytorch_dqn import MCTSAgent
 import GomokuEnv
 from  agent import RandomAgent
 from GomokuEnv import Stone
@@ -9,7 +10,7 @@ from agent import MinimaxAgent
 #humanが先行なら"first"、後攻なら"second"を入れてください
 env = GomokuEnv.GomokuEnv(train_target="first")
 #任意のエージェントを選択してください
-opponent_agent = MinimaxAgent()
+opponent_agent = MCTSAgent(simulations=5000)  # シミュレーション回数は調整可能
 # opponent_agent = RuleBasedAgent()
 # opponent_agent = DQNAgent()
 
@@ -68,6 +69,15 @@ class GomokuGUI:
                             return (board_x, board_y)
     
     def run(self):
+        # 対戦相手のエージェントをプリント
+        if isinstance(self.opponent_agent, MCTSAgent):
+            print("Opponent Agent: MCTS")
+        elif isinstance(self.opponent_agent, RuleBasedAgent):
+            print("Opponent Agent: RuleBased")
+        elif isinstance(self.opponent_agent, DQNAgent):
+            print("Opponent Agent: DQN")
+        else:
+            print("Opponent Agent: Unknown")
         done = False
         total_reward = 0
         while not done:
@@ -79,7 +89,6 @@ class GomokuGUI:
             else:
                 action = self.opponent_agent.get_action(self.state, self.env.current_player)
             next_state, reward, done, _ = self.env.step(action)
-            self.env.current_player = 3 - self.env.current_player
             self.state = next_state
             total_reward += reward
             print('Total Reward:', total_reward)
