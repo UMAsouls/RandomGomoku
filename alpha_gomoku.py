@@ -11,7 +11,8 @@ from torch.utils.data import Dataset, DataLoader
 import torch.multiprocessing as mp
 from collections import deque
 from tqdm import tqdm
-from RandomGomoku.GomokuEnv import GomokuEnv
+from GomokuEnv import GomokuEnv
+import datetime  # 時間取得のためのモジュールを追加
 
 # デバイスの設定
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -143,7 +144,7 @@ class MCTS:
                 search_path.append(node)
             
             # 葉ノードの状態を評価
-            parent = search_path[-2]
+            # parent = search_path[-2]
             leaf_state = current_state
             
             # ターミナル状態かチェック
@@ -428,14 +429,16 @@ def train_network(model, replay_buffer, epochs=1, batch_size=128, lr=0.001):
 class AlphaZero:
     """AlphaZeroの実装"""
     def __init__(self, board_size=19, num_iterations=100, num_self_play_games=100,
-                 checkpoint_dir='models'):
+                 checkpoint_dir='models', log_dir='logs'):
         self.board_size = board_size
         self.num_iterations = num_iterations
         self.num_self_play_games = num_self_play_games
         self.checkpoint_dir = checkpoint_dir
+        self.log_dir = log_dir
         
         # ディレクトリの作成
         os.makedirs(checkpoint_dir, exist_ok=True)
+        os.makedirs(log_dir, exist_ok=True)
         
         # モデルの初期化
         self.model = DualNetwork(board_size).to(device)
@@ -474,6 +477,23 @@ class AlphaZero:
             # 3. モデルの保存
             torch.save(self.model.state_dict(), self.model_path)
             print(f"モデルを保存しました: {self.model_path}")
+            
+            # 4. トレーニング情報をログファイルに保存
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_filename = os.path.join(self.log_dir, f'training_log_{timestamp}.txt')
+            
+            with open(log_filename, 'w') as f:
+                f.write(f"Training Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Model Path: {self.model_path}\n")
+                f.write(f"Iteration: {iteration+1}/{self.num_iterations}\n")
+                f.write(f"Policy Loss: {policy_loss:.6f}\n")
+                f.write(f"Value Loss: {value_loss:.6f}\n")
+                f.write(f"Replay Buffer Size: {len(self.replay_buffer)}\n")
+                f.write(f"Self-Play Games: {self.num_self_play_games}\n")
+                f.write(f"Board Size: {self.board_size}\n")
+                f.write(f"Training Duration: {time.time() - start_time:.2f} seconds\n")
+            
+            print(f"トレーニング情報をログに保存しました: {log_filename}")
             
             iteration_time = time.time() - start_time
             print(f"イテレーション完了: {iteration_time:.2f} 秒")
@@ -639,17 +659,17 @@ class AlphaZero:
 
 if __name__ == "__main__":
     # ボードサイズ（15x15は標準的な五目並べのサイズ）
-    board_size = 19
+    board_size = 7
     
     # AlphaZeroの初期化
     alpha_zero = AlphaZero(
         board_size=board_size,
-        num_iterations=20,
-        num_self_play_games=100
+        num_iterations=100,
+        num_self_play_games=1000
     )
     
     # 訓練を実行
     alpha_zero.train()
     
     # 人間との対戦
-    alpha_zero.play_against_human()
+    # alpha_zero.play_against_human()

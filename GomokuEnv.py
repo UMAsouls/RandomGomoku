@@ -26,7 +26,13 @@ class GomokuEnv:
     def step(self, action):
         x, y = action
         if self.board.GetBoardInt()[y][x] != 0:
-            raise ValueError("無効なアクション : 既に埋まっているセル")
+            # 無効なアクション：既に埋まっているセルが選択された
+            # これは盤面がすべて埋まった場合などに発生する可能性がある
+            # エラーを投げる代わりに引き分けとして扱う
+            reward = torch.tensor(0.0, device=self.device)
+            done = True
+            board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+            return board_tensor, reward, done, {"invalid_action": True}
 
         if self.current_player == 1:
             self.stone = Stone.BLACK

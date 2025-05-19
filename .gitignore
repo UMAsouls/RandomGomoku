@@ -163,3 +163,5 @@ cython_debug/
 
 
 dqn_model/
+logs/
+models/
