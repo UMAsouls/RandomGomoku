@@ -6,7 +6,7 @@ from RandomGomoku.const import Stone
 
 class GomokuEnv:
     def __init__(self, board_size=19, train_target="first", device="cuda" if torch.cuda.is_available() else "cpu"):
-        print(torch.cuda.is_available())
+        # print(torch.cuda.is_available())
         self.board_size = board_size
         self.container = Dependency()
         self.board: Board = self.container.resolve(Board)
