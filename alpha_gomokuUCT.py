@@ -90,60 +90,158 @@ class MCTSNode:
 
 class MCTS:
     """モンテカルロ木探索の実装"""
-    def __init__(self, model, num_simulations=800, c_puct=1.0):
+    def __init__(self, model, num_simulations=800, c_puct=1.0, use_heuristic=True, heuristic_weight=0.2):
         self.model = model
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         self.board_size = model.board_size
+        self.use_heuristic = use_heuristic  # ヒューリスティック使用フラグ
+        self.heuristic_weight = heuristic_weight  # ヒューリスティックの重み
 
-    def _ucb_score(self, parent, child, action):
-        """UCB (Upper Confidence Bound) スコアの計算"""
+    def _ucb_score(self, parent, child, action=None, state=None):
+        """UCB (Upper Confidence Bound) スコアの計算 + ヒューリスティック"""
         prior_score = self.c_puct * child.prior * math.sqrt(parent.visit_count) / (1 + child.visit_count)
         if child.visit_count > 0:
             value_score = -child.value()
         else:
             value_score = 0
         
-        # 勝ち確定手なら無限大のスコア
-        if parent.state is not None and self._is_winning_move(parent.state, action):
-            return float('inf')
-                
-        return value_score + prior_score
+        # ヒューリスティック項を追加
+        heuristic_score = 0
+        if self.use_heuristic and action is not None and state is not None:
+ 
+            # 威嚇検出ヒューリスティック
+            threat_score = self._threat_heuristic(state, action)
+            # パターン評価ヒューリスティック
+            pattern_score = self._pattern_heuristic(state, action)
+            # 接続性ヒューリスティック
+            connectivity_score = self._connectivity_heuristic(state, action)
+            
+            # ヒューリスティックスコアの統合
+            heuristic_score = ( threat_score * 2 + pattern_score + connectivity_score) * self.heuristic_weight
+        
+        return value_score + prior_score + heuristic_score
     
-    def _is_winning_move(self, state, move):
-        """与えられた手が勝利に繋がるかチェックする軽量版"""
-        x, y = move % self.board_size, move // self.board_size
-        if state[y][x] != 0:  # すでに石が置かれている場合
-            return False
+
+    
+    def _threat_heuristic(self, state, action):
+        """威嚇検出ヒューリスティック（勝利に近い配置や、相手の勝利を阻止する位置を検出）"""
+        x, y = action % self.board_size, action // self.board_size
         
-        # プレイヤーを特定
-        player = 1 if np.sum(state == 1) == np.sum(state == -1) else -1
+        # 現在のプレイヤー（次の手番）を判断
+        current_player = -1 if np.sum(state == 1) > np.sum(state == -1) else 1
         
-        # 方向ベクトル定義: 横、縦、右下、左下
-        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+        # 行動をシミュレート
+        temp_state = state.copy()
+        temp_state[y][x] = current_player
         
-        for dx, dy in directions:
-            count = 1  # 自分自身
+        # 勝利するかどうかを確認
+        if self._is_winning_move(temp_state, x, y):
+            return 5.0  # 勝利する手には高いスコア
             
-            # 正方向
-            nx, ny = x + dx, y + dy
-            while 0 <= nx < self.board_size and 0 <= ny < self.board_size and state[ny][nx] == player:
-                count += 1
-                nx += dx
-                ny += dy
+        # 相手の勝利を阻止できるかを確認
+        temp_state[y][x] = -current_player  # 相手の石を置いてみる
+        if self._is_winning_move(temp_state, x, y):
+            return 3.0  # 相手の勝利を阻止する手にも高いスコア
             
-            # 負方向
-            nx, ny = x - dx, y - dy
-            while 0 <= nx < self.board_size and 0 <= ny < self.board_size and state[ny][nx] == player:
+        return 0.0
+    
+    def _pattern_heuristic(self, state, action):
+        """連続する石のパターンに基づく評価"""
+        x, y = action % self.board_size, action // self.board_size
+        current_player = -1 if np.sum(state == 1) > np.sum(state == -1) else 1
+        
+        # 行動をシミュレート
+        temp_state = state.copy()
+        temp_state[y][x] = current_player
+        
+        # 8つの方向
+        directions = [
+            (1, 0), (0, 1), (1, 1), (1, -1),  # 水平, 垂直, 右下がり対角線, 右上がり対角線
+            (-1, 0), (0, -1), (-1, -1), (-1, 1)  # 反対方向
+        ]
+        
+        max_line_length = 1  # この手を含む最長の連続した石の数
+        
+        for dx, dy in directions[:4]:  # 最初の4方向だけをチェック（対向方向は一緒にカウント）
+            line_length = 1  # この手自体を含む
+            
+            # 正方向のチェック
+            i, j = x + dx, y + dy
+            while 0 <= i < self.board_size and 0 <= j < self.board_size and temp_state[j][i] == current_player:
+                line_length += 1
+                i += dx
+                j += dy
+            
+            # 反対方向のチェック
+            i, j = x - dx, y - dy
+            while 0 <= i < self.board_size and 0 <= j < self.board_size and temp_state[j][i] == current_player:
+                line_length += 1
+                i -= dx
+                j -= dy
+            
+            max_line_length = max(max_line_length, line_length)
+        
+        # 石の数に基づくスコア（長いラインほど価値が高い）
+        scores = {1: 0.1, 2: 0.3, 3: 0.5, 4: 2.0, 5: 5.0}
+        return scores.get(max_line_length, 0.0)
+    
+    def _connectivity_heuristic(self, state, action):
+        """既存の石に接続する手の評価"""
+        x, y = action % self.board_size, action // self.board_size
+        
+        # 隣接するセルをチェック
+        adjacent_cells = [
+            (x+1, y), (x-1, y), (x, y+1), (x, y-1),
+            (x+1, y+1), (x-1, y-1), (x+1, y-1), (x-1, y+1)
+        ]
+        
+        current_player = -1 if np.sum(state == 1) > np.sum(state == -1) else 1
+        connection_score = 0
+        
+        for i, j in adjacent_cells:
+            if 0 <= i < self.board_size and 0 <= j < self.board_size:
+                # 自分の石に接続する場合
+                if state[j][i] == current_player:
+                    connection_score += 0.2
+                # 相手の石に接続する場合（牽制）
+                elif state[j][i] == -current_player:
+                    connection_score += 0.1
+        
+        return connection_score
+    
+    def _is_winning_move(self, state, x, y):
+        """指定された位置に石を置くことで勝利するかをチェック"""
+        player = state[y][x]
+        
+        # 8方向のチェック
+        directions = [
+            (1, 0), (0, 1), (1, 1), (1, -1),  # 水平, 垂直, 右下がり対角線, 右上がり対角線
+            (-1, 0), (0, -1), (-1, -1), (-1, 1)  # 反対方向
+        ]
+        
+        for dx, dy in directions[:4]:  # 最初の4方向だけをチェック（対向方向は一緒にカウント）
+            count = 1  # 石自体をカウント
+            
+            # 正方向のチェック
+            i, j = x + dx, y + dy
+            while 0 <= i < self.board_size and 0 <= j < self.board_size and state[j][i] == player:
                 count += 1
-                nx -= dx
-                ny -= dy
+                i += dx
+                j += dy
+            
+            # 反対方向のチェック
+            i, j = x - dx, y - dy
+            while 0 <= i < self.board_size and 0 <= j < self.board_size and state[j][i] == player:
+                count += 1
+                i -= dx
+                j -= dy
             
             if count >= 5:
                 return True
-                
+        
         return False
-    
+
     def search(self, state):
         """与えられた状態に基づいてMCTSを実行"""
         root = MCTSNode(0)
@@ -159,28 +257,13 @@ class MCTS:
         
         # 方策を合法手に制限
         policy_legal = np.zeros(self.board_size * self.board_size)
-        
-        # まず勝ち確定手をチェック
-        winning_moves = []
         for move in legal_moves:
-            if self._is_winning_move(state, move):
-                winning_moves.append(move)
-        
-        # 勝ち確定手がある場合は、それらに極めて高い確率を設定
-        if winning_moves:
-            for move in winning_moves:
-                policy_legal[move] = 1.0
-            # 勝ち確定手のみに確率を集中させる
+            policy_legal[move] = policy[move]
+            
+        # 合法手がある場合は正規化
+        if len(legal_moves) > 0:
             policy_legal = policy_legal / np.sum(policy_legal)
-        else:
-            # 通常通り方策を使用
-            for move in legal_moves:
-                policy_legal[move] = policy[move]
-                
-            # 合法手がある場合は正規化
-            if len(legal_moves) > 0:
-                policy_legal = policy_legal / np.sum(policy_legal)
-        
+            
         # 子ノードの初期化
         for move in legal_moves:
             root.children[move] = MCTSNode(policy_legal[move])
@@ -193,13 +276,12 @@ class MCTS:
             
             # 葉ノードを見つける
             while node.expanded():
-                action, node = self._select_child(node)
+                action, node = self._select_child(node, current_state)
                 x, y = action % self.board_size, action // self.board_size
                 current_state[y][x] = -1 if np.sum(current_state == 1) > np.sum(current_state == -1) else 1
                 search_path.append(node)
             
             # 葉ノードの状態を評価
-            # parent = search_path[-2]
             leaf_state = current_state
             
             # ターミナル状態かチェック
@@ -263,14 +345,15 @@ class MCTS:
         
         return mcts_policy
     
-    def _select_child(self, node):
+    def _select_child(self, node, state):
         """UCBスコアに基づいて子ノードを選択"""
         best_score = -float('inf')
         best_action = -1
         best_child = None
         
         for action, child in node.children.items():
-            score = self._ucb_score(node, child, action)
+            # ヒューリスティックを使用したUCBスコア計算
+            score = self._ucb_score(node, child, action, state)
             if score > best_score:
                 best_score = score
                 best_action = action
@@ -420,7 +503,7 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
             action = (action_idx % board_size, action_idx // board_size)
         
         # 環境での行動実行
-        state, reward, done, _ = env.step(action)
+        state, reward, done, info = env.step(action)
         state = state.cpu().numpy()
         current_player *= -1  # プレイヤー交代
     
@@ -501,15 +584,9 @@ class AlphaZero:
         # リプレイバッファの初期化
         self.replay_buffer = ReplayBuffer(capacity=500000)
         
-        # タイムスタンプの作成（モデルとログの両方で使用）
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        
         # モデルのチェックポイントパス
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.model_path = os.path.join(checkpoint_dir, f'alpha_gomoku_{board_size}_{timestamp}.pth')
-        
-        # 時間ベースのログディレクトリを作成
-        self.timestamp_log_dir = os.path.join(log_dir, f'log_{timestamp}')
-        os.makedirs(self.timestamp_log_dir, exist_ok=True)
         
         # 損失履歴を記録するリストを追加
         self.policy_loss_history = []
@@ -550,7 +627,7 @@ class AlphaZero:
             
             # 4. トレーニング情報をログファイルに保存
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_filename = os.path.join(self.timestamp_log_dir, f'training_log_{timestamp}.txt')
+            log_filename = os.path.join(self.log_dir, f'training_log_{timestamp}.txt')
             
             with open(log_filename, 'w') as f:
                 f.write(f"Training Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -600,7 +677,7 @@ class AlphaZero:
         # ファイル名に最終グラフかどうかを反映
         prefix = "final_" if final else ""
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        plot_filename = os.path.join(self.timestamp_log_dir, f'{prefix}loss_history_{timestamp}.png')
+        plot_filename = os.path.join(self.log_dir, f'{prefix}loss_history_{timestamp}.png')
         
         plt.savefig(plot_filename)
         plt.close()
@@ -773,8 +850,8 @@ if __name__ == "__main__":
     # AlphaZeroの初期化
     alpha_zero = AlphaZero(
         board_size=board_size,
-        num_iterations=    256,
-        num_self_play_games= 1000,
+        num_iterations=50,
+        num_self_play_games=500
     )
     
     # 訓練を実行

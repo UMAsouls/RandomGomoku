@@ -6,7 +6,6 @@ from RandomGomoku.const import Stone
 
 class GomokuEnv:
     def __init__(self, board_size=19, train_target="first", device="cuda" if torch.cuda.is_available() else "cpu"):
-        print(torch.cuda.is_available())
         self.board_size = board_size
         self.container = Dependency()
         self.board: Board = self.container.resolve(Board)
@@ -24,6 +23,14 @@ class GomokuEnv:
             raise ValueError("train_targetはfirstかsecondを指定してください")
 
     def step(self, action):
+        # Noneアクションのチェック
+        if action is None:
+            # 無効なアクション：Noneが渡された
+            reward = torch.tensor(0.0, device=self.device)
+            done = True
+            board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+            return board_tensor, reward, done, {"invalid_action": True}
+            
         x, y = action
         if self.board.GetBoardInt()[y][x] != 0:
             # 無効なアクション：既に埋まっているセルが選択された
@@ -62,12 +69,15 @@ class GomokuEnv:
         else:
             reward += 0.0
 
+        # 現プレイヤーを変数に保存
+        now_player = self.current_player
+
         # 次のプレイヤーに交代
         self.current_player = 3 - self.current_player
 
         # 盤面をPyTorchテンソルに変換してGPUに転送
         board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
-        return board_tensor, reward, done, {}
+        return board_tensor, reward, done, {"which_player":now_player}
 
     def get_human_action(self):
         while True:

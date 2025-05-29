@@ -3,7 +3,7 @@ import sys
 import os
 import torch
 import numpy as np
-from main import DualNetwork, MCTS
+from alpha_gomoku import DualNetwork, MCTS
 import GomokuEnv
 
 # デバイスの設定
@@ -20,10 +20,12 @@ class AlphaGomokuGUI:
         self.model = DualNetwork(board_size).to(device)
         if os.path.exists(model_path):
             try:
+                print(f"モデルをロードしています: {model_path}")
                 self.model.load_state_dict(torch.load(model_path, map_location=device))
                 print(f"モデルを読み込みました: {model_path}")
-            except:
-                print("モデルの読み込みに失敗しました。新しいモデルを初期化します。")
+            except Exception as e:
+                print(f"モデルの読み込みに失敗しました: {str(e)}")
+                print("新しいモデルを初期化します。")
         else:
             print(f"モデルが見つかりません: {model_path}")
             
@@ -181,5 +183,5 @@ class AlphaGomokuGUI:
                     waiting = False
 
 # 実行部分
-gui = AlphaGomokuGUI(board_size=7, model_path='models/alpha_gomoku_7.pth')
+gui = AlphaGomokuGUI(board_size=7, model_path='models/alpha_gomoku_7_20250524_084916.pth')
 gui.run()
