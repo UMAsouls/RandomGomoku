@@ -20,7 +20,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DualNetwork(nn.Module):
     """方策と価値を出力するニューラルネットワーク"""
-    def __init__(self, board_size, num_channels=256):
+    def __init__(self, board_size, num_channels=512):  # チャネル数を増加
         super(DualNetwork, self).__init__()
         self.board_size = board_size
         
@@ -90,11 +90,13 @@ class MCTSNode:
 
 class MCTS:
     """モンテカルロ木探索の実装"""
-    def __init__(self, model, num_simulations=800, c_puct=1.0):
+    def __init__(self, model, num_simulations=800, c_puct=1.0, use_gumbel=False, gumbel_scale=0.1):
         self.model = model
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         self.board_size = model.board_size
+        self.use_gumbel = use_gumbel
+        self.gumbel_scale = gumbel_scale
 
     def _ucb_score(self, parent, child, action):
         """UCB (Upper Confidence Bound) スコアの計算"""
@@ -107,8 +109,16 @@ class MCTS:
         # 勝ち確定手なら無限大のスコア
         if parent.state is not None and self._is_winning_move(parent.state, action):
             return float('inf')
+        
+        score = value_score + prior_score
+        
+        # Gumbelノイズを追加（有効な場合）
+        if self.use_gumbel:
+            # Gumbel(0, scale)分布からノイズを生成
+            noise = np.random.gumbel(0, self.gumbel_scale)
+            score += noise
                 
-        return value_score + prior_score
+        return score
     
     def _is_winning_move(self, state, move):
         """与えられた手が勝利に繋がるかチェックする軽量版"""
@@ -279,13 +289,63 @@ class MCTS:
         return best_action, best_child
     
     def _get_legal_moves(self, state):
-        """合法手のリストを返す"""
-        legal_moves = []
+        """合法手のリストを返す（既に石が置かれている位置から2マス以内の空きマスのみ）"""
+        legal_moves = set()
+        stones_exist = False
+        
+        # 盤面上の全ての石を探索
         for y in range(self.board_size):
             for x in range(self.board_size):
-                if state[y][x] == 0:  # 空のセル
-                    legal_moves.append(y * self.board_size + x)
-        return legal_moves
+                if state[y][x] != 0:  # 石が置かれている場合
+                    stones_exist = True
+                    # 周囲2マス以内の空きマスを合法手に追加
+                    for dy in range(-2, 3):  # -2, -1, 0, 1, 2
+                        for dx in range(-2, 3):  # -2, -1, 0, 1, 2
+                            nx, ny = x + dx, y + dy
+                            if 0 <= nx < self.board_size and 0 <= ny < self.board_size and state[ny][nx] == 0:
+                                legal_moves.add(ny * self.board_size + nx)
+        
+        
+        return list(legal_moves)
+
+    def _augment_data(self, state, policy):
+        """盤面と方策の対称変換を行い、8つの等価なデータを生成"""
+        # 元の状態と方策
+        states, policies = [state], [policy]
+        
+        # 90度、180度、270度回転
+        for i in range(1, 4):
+            rot_state = np.rot90(state, k=i)
+            rot_policy = self._rotate_policy(policy, i)
+            states.append(rot_state)
+            policies.append(rot_policy)
+        
+        # 水平反転とその回転
+        flip_state = np.fliplr(state)
+        flip_policy = self._flip_policy_horizontally(policy)
+        states.append(flip_state)
+        policies.append(flip_policy)
+        
+        # 水平反転した状態の90度、180度、270度回転
+        for i in range(1, 4):
+            rot_flip_state = np.rot90(flip_state, k=i)
+            rot_flip_policy = self._rotate_policy(flip_policy, i)
+            states.append(rot_flip_state)
+            policies.append(rot_flip_policy)
+            
+        return states, policies
+
+    def _rotate_policy(self, policy, k=1):
+        """方策を90度×k回転させる"""
+        policy_2d = policy.reshape(self.board_size, self.board_size)
+        rotated_policy_2d = np.rot90(policy_2d, k=k)
+        return rotated_policy_2d.flatten()
+    
+    def _flip_policy_horizontally(self, policy):
+        """方策を水平方向に反転させる"""
+        policy_2d = policy.reshape(self.board_size, self.board_size)
+        flipped_policy_2d = np.fliplr(policy_2d)
+        return flipped_policy_2d.flatten()
 
     def _is_terminal(self, state):
         """終端状態かどうかを返す（簡易実装）"""
@@ -387,8 +447,8 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
     model.to(device)
     model.eval()
     
-    # MCTSの初期化
-    mcts = MCTS(model, num_simulations=100)  # 訓練時は計算量削減のため100回に設定
+    # MCTSの初期化 (Gumbelを使用)
+    mcts = MCTS(model, num_simulations=400, use_gumbel=True, gumbel_scale=0.05)  # 訓練時も計算量を増加
     
     # 環境の初期化
     env = GomokuEnv(board_size=board_size)
@@ -434,8 +494,8 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
     # 結果をキューに送信
     result_queue.put((game_idx, final_value))
 
-def train_network(model, replay_buffer, epochs=1, batch_size=128, lr=0.001):
-    """ネットワークの訓練"""
+def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.0005):
+    """ニューラルネットワークの訓練 - パラメータ調整"""
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     
@@ -483,7 +543,7 @@ def train_network(model, replay_buffer, epochs=1, batch_size=128, lr=0.001):
 
 class AlphaZero:
     """AlphaZeroの実装"""
-    def __init__(self, board_size=19, num_iterations=100, num_self_play_games=100,
+    def __init__(self, board_size=19, num_iterations=100, num_self_play_games=64,
                  checkpoint_dir='models', log_dir='logs'):
         self.board_size = board_size
         self.num_iterations = num_iterations
@@ -499,13 +559,16 @@ class AlphaZero:
         self.model = DualNetwork(board_size).to(device)
         
         # リプレイバッファの初期化
-        self.replay_buffer = ReplayBuffer(capacity=500000)
+        self.replay_buffer = ReplayBuffer(capacity=17000)
         
         # タイムスタンプの作成（モデルとログの両方で使用）
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # モデルのベース名を設定
+        self.model_base_name = f'alpha_gomoku_{board_size}'
+        
         # モデルのチェックポイントパス
-        self.model_path = os.path.join(checkpoint_dir, f'alpha_gomoku_{board_size}_{timestamp}.pth')
+        self.model_path = os.path.join(checkpoint_dir, f'{self.model_base_name}_{timestamp}.pth')
         
         # 時間ベースのログディレクトリを作成
         self.timestamp_log_dir = os.path.join(log_dir, f'log_{timestamp}')
@@ -514,6 +577,8 @@ class AlphaZero:
         # 損失履歴を記録するリストを追加
         self.policy_loss_history = []
         self.value_loss_history = []
+        # イテレーション番号を追跡するリストを追加
+        self.iterations = []
         
         # 既存のモデルをロード
         if os.path.exists(self.model_path):
@@ -524,6 +589,28 @@ class AlphaZero:
                 print("新規モデルを初期化します")
         else:
             print("新規モデルを初期化します")
+            # 初期モデルの保存
+            self.save_model("initial")
+    
+    def save_model(self, stage, iteration=None):
+        """モデルを保存するヘルパーメソッド"""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # ファイル名の生成 
+        if iteration is not None:
+            model_filename = f'{self.model_base_name}_iter{iteration}_{stage}_{timestamp}.pth'
+        else:
+            model_filename = f'{self.model_base_name}_{stage}_{timestamp}.pth'
+            
+        save_path = os.path.join(self.checkpoint_dir, model_filename)
+        
+        # モデルの保存
+        torch.save(self.model.state_dict(), save_path)
+        print(f"モデルを保存しました: {save_path}")
+        
+        # 最新のモデルパスを更新
+        self.model_path = save_path
+        return save_path
     
     def train(self):
         """AlphaZeroの訓練ループ"""
@@ -535,6 +622,12 @@ class AlphaZero:
             print("自己対戦でデータを生成中...")
             self._generate_self_play_data()
             
+            # 自己対戦後のモデルを保存
+            self.save_model("after_selfplay", iteration+1)
+            
+            # 自己対戦後の状態をグラフ化して保存
+            self._plot_loss_history(stage="after_selfplay", iteration=iteration+1)
+            
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
             policy_loss, value_loss = train_network(self.model, self.replay_buffer)
@@ -543,14 +636,17 @@ class AlphaZero:
             # 損失履歴に追加
             self.policy_loss_history.append(policy_loss)
             self.value_loss_history.append(value_loss)
+            self.iterations.append(iteration+1)
             
-            # 3. モデルの保存
-            torch.save(self.model.state_dict(), self.model_path)
-            print(f"モデルを保存しました: {self.model_path}")
+            # 訓練後のモデルを保存
+            self.save_model("trained", iteration+1)
             
-            # 4. トレーニング情報をログファイルに保存
+            # 訓練後の状態をグラフ化して保存
+            self._plot_loss_history(stage="after_training", iteration=iteration+1)
+            
+            # 3. トレーニング情報をログファイルに保存
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_filename = os.path.join(self.timestamp_log_dir, f'training_log_{timestamp}.txt')
+            log_filename = os.path.join(self.timestamp_log_dir, f'training_log_{iteration+1}_{timestamp}.txt')
             
             with open(log_filename, 'w') as f:
                 f.write(f"Training Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -565,50 +661,76 @@ class AlphaZero:
             
             print(f"トレーニング情報をログに保存しました: {log_filename}")
             
-            # 各イテレーションごとに損失グラフを更新して保存
-            self._plot_loss_history()
-            
             iteration_time = time.time() - start_time
             print(f"イテレーション完了: {iteration_time:.2f} 秒")
         
         # トレーニング終了時に最終的な損失グラフを保存
         self._plot_loss_history(final=True)
-    
-    def _plot_loss_history(self, final=False):
-        """損失の履歴をグラフ化して保存"""
-        plt.figure(figsize=(12, 6))
         
-        iterations = list(range(1, len(self.policy_loss_history) + 1))
+        # トレーニング完了時の最終モデルを保存
+        self.save_model("final")
+    
+    def _plot_loss_history(self, final=False, stage=None, iteration=None):
+        """損失の履歴をグラフ化して保存"""
+        if len(self.policy_loss_history) == 0:
+            return  # 損失データがない場合は何もしない
+            
+        plt.figure(figsize=(15, 10))
+        
+        # グラフタイトルに情報を追加
+        title_suffix = ""
+        if final:
+            title_suffix = " (Final)"
+        elif stage and iteration:
+            title_suffix = f" ({stage}, Iteration {iteration})"
         
         # 2つのグラフを並べて表示
-        plt.subplot(1, 2, 1)
-        plt.plot(iterations, self.policy_loss_history, 'b-', marker='o')
-        plt.title('Policy Loss History')
+        plt.subplot(2, 1, 1)
+        plt.plot(self.iterations, self.policy_loss_history, 'b-', marker='o')
+        plt.title(f'Policy Loss History{title_suffix}')
         plt.xlabel('Iteration')
         plt.ylabel('Policy Loss')
         plt.grid(True)
         
-        plt.subplot(1, 2, 2)
-        plt.plot(iterations, self.value_loss_history, 'r-', marker='o')
-        plt.title('Value Loss History')
+        plt.subplot(2, 1, 2)
+        plt.plot(self.iterations, self.value_loss_history, 'r-', marker='o')
+        plt.title(f'Value Loss History{title_suffix}')
         plt.xlabel('Iteration')
         plt.ylabel('Value Loss')
         plt.grid(True)
         
-        plt.tight_layout()
+        # グラフ下部に現在の訓練状況を表示
+        plt.figtext(0.5, 0.01, 
+                   f"Board Size: {self.board_size}, Buffer Size: {len(self.replay_buffer)}, Games/Iter: {self.num_self_play_games}", 
+                   ha="center", fontsize=10, 
+                   bbox={"facecolor":"lightgray", "alpha":0.5, "pad":5})
         
-        # ファイル名に最終グラフかどうかを反映
-        prefix = "final_" if final else ""
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        
+        # ファイル名の作成
+        parts = []
+        if final:
+            parts.append("final")
+        if stage:
+            parts.append(stage)
+        if iteration:
+            parts.append(f"iter{iteration}")
+            
+        prefix = "_".join(parts)
+        if prefix:
+            prefix += "_"
+            
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         plot_filename = os.path.join(self.timestamp_log_dir, f'{prefix}loss_history_{timestamp}.png')
         
-        plt.savefig(plot_filename)
+        plt.savefig(plot_filename, dpi=150)
         plt.close()
         
         print(f"損失のグラフを保存しました: {plot_filename}")
 
     def _generate_self_play_data(self):
         """自己対戦データの生成（並列実行）"""
+        # 現在の最新のモデルを使用
         torch.save(self.model.state_dict(), self.model_path)
         
         # マルチプロセッシングの準備
@@ -667,8 +789,8 @@ class AlphaZero:
         model.to(device)
         model.eval()
         
-        # MCTSの初期化
-        mcts = MCTS(model, num_simulations=100)
+        # MCTSの初期化 (Gumbelを使用)
+        mcts = MCTS(model, num_simulations=400, use_gumbel=True, gumbel_scale=0.05)  # シミュレーション回数増加
         
         for game_idx in game_indices:
             # 環境の初期化
@@ -709,7 +831,11 @@ class AlphaZero:
             for hist_state, hist_policy, hist_player in game_memory:
                 # プレイヤーに応じた報酬の調整
                 adjusted_value = final_value * hist_player
-                shared_buffer.append((hist_state, hist_policy, adjusted_value))
+                
+                # 対称性を活用してデータを拡張（8倍に）
+                augmented_states, augmented_policies = mcts._augment_data(hist_state, hist_policy)
+                for aug_state, aug_policy in zip(augmented_states, augmented_policies):
+                    shared_buffer.append((aug_state, aug_policy, adjusted_value))
             
             # 結果をキューに送信
             result_queue.put((game_idx, final_value))
@@ -719,8 +845,8 @@ class AlphaZero:
         env = GomokuEnv(board_size=self.board_size)
         state = env.board.GetBoardInt()
         
-        # MCTSの初期化
-        mcts = MCTS(self.model, num_simulations=800)  # 実戦時はシミュレーション回数を増やす
+        # MCTSの初期化 (対戦時はGumbelを無効化)
+        mcts = MCTS(self.model, num_simulations=800, use_gumbel=False)  # 実戦時はシミュレーション回数を増やす
         
         done = False
         human_first = input("先手で始めますか？ (y/n): ").lower() == 'y'
@@ -770,12 +896,15 @@ if __name__ == "__main__":
     # ボードサイズ（15x15は標準的な五目並べのサイズ）
     board_size = 7
     
-    # AlphaZeroの初期化
+    # AlphaZeroの初期化 - 本番用パラメータ
     alpha_zero = AlphaZero(
         board_size=board_size,
-        num_iterations=    256,
-        num_self_play_games= 1000,
+        num_iterations=100,     # 5120から100に削減 - 実用的なトレーニング回数
+        num_self_play_games=64, # 256から64に削減 - 効率的なデータ生成数
     )
+    
+    # MCTSクラス内のnum_simulationsを調整
+    # MCTS初期化時に num_simulations=800 を使用（自己対戦時は400程度）
     
     # 訓練を実行
     alpha_zero.train()
