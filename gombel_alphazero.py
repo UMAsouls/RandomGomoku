@@ -512,13 +512,23 @@ class GombelAlphaZero:
             torch.save(self.model.state_dict(), self.model_path)
             print(f"モデルを保存しました: {self.model_path}")
             
-            # 4. トレーニング情報をログファイルに保存
+            # 4. タイムスタンプ付きでモデルとログファイルを保存
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # タイムスタンプ付きのモデルファイル名
+            timestamp_model_path = os.path.join(self.checkpoint_dir, f'gombel_alphazero_{self.board_size}_{timestamp}.pth')
+            
+            # タイムスタンプ付きでモデルを保存
+            torch.save(self.model.state_dict(), timestamp_model_path)
+            print(f"タイムスタンプ付きモデルを保存しました: {timestamp_model_path}")
+            
+            # トレーニング情報をログファイルに保存
             log_filename = os.path.join(self.log_dir, f'gombel_training_log_{timestamp}.txt')
             
             with open(log_filename, 'w') as f:
                 f.write(f"Gombel Training Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Model Path: {self.model_path}\n")
+                f.write(f"Latest Model Path: {self.model_path}\n")
+                f.write(f"Timestamped Model Path: {timestamp_model_path}\n")
                 f.write(f"Iteration: {iteration+1}/{self.num_iterations}\n")
                 f.write(f"Policy Loss: {policy_loss:.6f}\n")
                 f.write(f"Value Loss: {value_loss:.6f}\n")
@@ -716,8 +726,8 @@ if __name__ == "__main__":
     # Gombel AlphaZeroの初期化
     gombel_az = GombelAlphaZero(
         board_size=board_size,
-        num_iterations=100,
-        num_self_play_games=1000
+        num_iterations=1,
+        num_self_play_games=10
     )
     
     # 訓練を実行

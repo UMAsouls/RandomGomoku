@@ -95,3 +95,58 @@ class Board():
   
     def copy(self): 
         return self.GetBoardInt()
+        
+    def IsFull(self) -> bool:
+        """
+        ボードが完全に石で埋まっているかをチェックします。
+        埋まっている場合はTrue、そうでなければFalseを返します。
+        """
+        for row in self.__board:
+            for mass in row:
+                if mass.GetStatus() == 0:  # 0は空きマスを表す
+                    return False
+        return True
+    
+    def CheckWin(self, x: int, y: int) -> bool:
+        """
+        指定された位置から五目並んでいるかをチェックします。
+        勝利条件を満たしていればTrue、そうでなければFalseを返します。
+        """
+        if x < 0 or y < 0 or x >= self.__width or y >= self.__height:
+            return False
+        
+        stone_type = self.__board[y][x].GetStatus()
+        if stone_type == 0:  # 空きマスは勝利条件を満たさない
+            return False
+        
+        directions = [
+            (0, 1),   # 水平
+            (1, 0),   # 垂直
+            (1, 1),   # 右下対角線
+            (1, -1)   # 右上対角線
+        ]
+        
+        for dx, dy in directions:
+            count = 1  # 現在位置の石をカウント
+            
+            # 正方向に連続する同じ石をカウント
+            nx, ny = x + dx, y + dy
+            while (0 <= nx < self.__width and 0 <= ny < self.__height and 
+                   self.__board[ny][nx].GetStatus() == stone_type):
+                count += 1
+                nx += dx
+                ny += dy
+            
+            # 負方向に連続する同じ石をカウント
+            nx, ny = x - dx, y - dy
+            while (0 <= nx < self.__width and 0 <= ny < self.__height and 
+                   self.__board[ny][nx].GetStatus() == stone_type):
+                count += 1
+                nx -= dx
+                ny -= dy
+            
+            # 5つ以上揃っていれば勝利
+            if count >= 5:
+                return True
+        
+        return False

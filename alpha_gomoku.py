@@ -14,59 +14,83 @@ from tqdm import tqdm
 from GomokuEnv import GomokuEnv
 import datetime  # 時間取得のためのモジュールを追加
 import matplotlib.pyplot as plt  # グラフ作成用にmatplotlibをインポート
+from torch.optim.lr_scheduler import StepLR, ExponentialLR  # 学習率スケジューラをインポート
 
 # デバイスの設定
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DualNetwork(nn.Module):
     """方策と価値を出力するニューラルネットワーク"""
-    def __init__(self, board_size, num_channels=512):  # チャネル数を増加
+    def __init__(self, board_size, num_channels=64, num_res_blocks=6):  # 残差ブロック数を指定可能に
         super(DualNetwork, self).__init__()
         self.board_size = board_size
         
-        # 共通の畳み込み層
-        self.conv1 = nn.Conv2d(1, num_channels, 3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=1)
+        # 入力層
+        self.conv_input = nn.Conv2d(1, num_channels, 3, stride=1, padding=1)
+        self.bn_input = nn.BatchNorm2d(num_channels)
         
-        # バッチ正規化
-        self.bn1 = nn.BatchNorm2d(num_channels)
-        self.bn2 = nn.BatchNorm2d(num_channels)
-        self.bn3 = nn.BatchNorm2d(num_channels)
-        self.bn4 = nn.BatchNorm2d(num_channels)
+        # プーリング層の追加
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        
+        # 残差ブロック
+        self.res_blocks_low = nn.ModuleList([
+            self._build_res_block(num_channels) for _ in range(num_res_blocks)
+        ])
+
         
         # 方策ヘッド
-        self.policy_conv = nn.Conv2d(num_channels, 2, 1, stride=1)
-        self.policy_bn = nn.BatchNorm2d(2)
-        self.policy_fc = nn.Linear(2 * board_size * board_size, board_size * board_size)
+        self.policy_conv = nn.Conv2d(num_channels, 32, 1, stride=1)
+        self.policy_bn = nn.BatchNorm2d(32)
+        self.policy_fc = nn.Linear(32 * board_size * board_size, board_size * board_size)
         
         # 価値ヘッド
-        self.value_conv = nn.Conv2d(num_channels, 1, 1, stride=1)
-        self.value_bn = nn.BatchNorm2d(1)
-        self.value_fc1 = nn.Linear(board_size * board_size, 256)
+        self.value_conv = nn.Conv2d(num_channels, 32, 1, stride=1)
+        self.value_bn = nn.BatchNorm2d(32)
+        self.value_fc1 = nn.Linear(32 * board_size * board_size, 256)
+        self.value_dropout = nn.Dropout(0.3)  # ドロップアウト追加
         self.value_fc2 = nn.Linear(256, 1)
+    
+    def _build_res_block(self, num_channels):
+        """残差ブロックを構築"""
+        return nn.Sequential(
+            nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=1),
+            nn.BatchNorm2d(num_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_channels, num_channels, 3, stride=1, padding=1),
+            nn.BatchNorm2d(num_channels)
+        )
     
     def forward(self, x):
         # 入力: [batch, board_size, board_size] -> [batch, 1, board_size, board_size]
         x = x.view(-1, 1, self.board_size, self.board_size)
         
-        # 共通の畳み込み層
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = F.relu(self.bn4(self.conv4(x)))
+        # 入力層
+        x = F.relu(self.bn_input(self.conv_input(x)))
+        
+        # プーリングで空間的サイズを縮小 - 広域的特徴の抽出
+        x_pooled = self.pool(x)
+        
+        #残差ブロック処理
+        for res_block in self.res_blocks_low:
+            residual = x_pooled
+            x_pooled = res_block(x_pooled)
+            x_pooled += residual
+            x_pooled = F.relu(x_pooled)
+        
+
+
         
         # 方策ヘッド
         policy = F.relu(self.policy_bn(self.policy_conv(x)))
-        policy = policy.view(-1, 2 * self.board_size * self.board_size)
+        policy = policy.view(-1, 32 * self.board_size * self.board_size)
         policy = self.policy_fc(policy)
         policy_logits = policy.log_softmax(dim=1)
         
         # 価値ヘッド
         value = F.relu(self.value_bn(self.value_conv(x)))
-        value = value.view(-1, self.board_size * self.board_size)
+        value = value.view(-1, 32 * self.board_size * self.board_size)
         value = F.relu(self.value_fc1(value))
+        value = self.value_dropout(value)
         value = torch.tanh(self.value_fc2(value))
         
         return policy_logits, value
@@ -89,14 +113,18 @@ class MCTSNode:
         return self.value_sum / self.visit_count
 
 class MCTS:
-    """モンテカルロ木探索の実装"""
-    def __init__(self, model, num_simulations=800, c_puct=1.0, use_gumbel=False, gumbel_scale=0.1):
+    """モンテカルロ木探索の実装 - 軽量化バージョン"""
+    def __init__(self, model, num_simulations=600, c_puct=1.0, use_gumbel=False, gumbel_scale=0.1):  # シミュレーション回数を削減
         self.model = model
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         self.board_size = model.board_size
         self.use_gumbel = use_gumbel
         self.gumbel_scale = gumbel_scale
+        # 評価結果をキャッシュするための辞書を追加
+        self.evaluation_cache = {}
+        self.cache_hit = 0
+        self.cache_miss = 0
 
     def _ucb_score(self, parent, child, action):
         """UCB (Upper Confidence Bound) スコアの計算"""
@@ -156,20 +184,35 @@ class MCTS:
     
     def search(self, state):
         """与えられた状態に基づいてMCTSを実行"""
+        # キャッシュをリセット（メモリ消費を抑制）
+        if len(self.evaluation_cache) > 1000:
+            self.evaluation_cache = {}
+            self.cache_hit = 0
+            self.cache_miss = 0
+        
         root = MCTSNode(0)
         root.state = state.copy()
         
-        # 評価関数から方策と価値を取得
-        state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-        with torch.no_grad():
-            policy_logits, value = self.model(state_tensor)
+        # キャッシュから評価を取得するか、新たに計算
+        state_hash = hash(state.tobytes())
+        if state_hash in self.evaluation_cache:
+            policy, _ = self.evaluation_cache[state_hash]
+            self.cache_hit += 1
+        else:
+            # 評価関数から方策と価値を取得
+            state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+            with torch.no_grad():
+                policy_logits, value = self.model(state_tensor)
+            
+            policy = torch.exp(policy_logits).squeeze(0).cpu().numpy()
+            # キャッシュに保存
+            self.evaluation_cache[state_hash] = (policy, value.item())
+            self.cache_miss += 1
         
-        policy = torch.exp(policy_logits).squeeze(0).cpu().numpy()
+        policy_legal = np.zeros(self.board_size * self.board_size)
         legal_moves = self._get_legal_moves(state)
         
         # 方策を合法手に制限
-        policy_legal = np.zeros(self.board_size * self.board_size)
-        
         # まず勝ち確定手をチェック
         winning_moves = []
         for move in legal_moves:
@@ -256,22 +299,49 @@ class MCTS:
         for action, child in root.children.items():
             visit_counts[action] = child.visit_count
         
-        # 温度パラメータを使って方策を計算
-        temperature = 1.0
-        if temperature == 0:
-            # グリーディー選択
+        # 現在の手数に基づいて温度パラメータを決定
+        move_count = self._get_move_count(state)
+        # 序盤（最初の30手）は温度1.0、それ以降は温度をほぼゼロにする
+        temperature = 1.0 if move_count < 30 else 1e-3
+        
+        if temperature < 1e-6:
+            # 温度がほぼゼロの場合はグリーディー選択
             action = np.argmax(visit_counts)
             mcts_policy = np.zeros(self.board_size * self.board_size)
             mcts_policy[action] = 1.0
         else:
-            # 温度付き方策
-            visit_count_distribution = visit_counts ** (1 / temperature)
-            if np.sum(visit_count_distribution) > 0:
-                mcts_policy = visit_count_distribution / np.sum(visit_count_distribution)
-            else:
-                mcts_policy = np.ones(self.board_size * self.board_size) / (self.board_size * self.board_size)
+            # 数値的に安定した方法で温度スケーリングを実行
+            try:
+                # 訪問回数がゼロでないアクションのみを考慮
+                nonzero_indices = np.where(visit_counts > 0)[0]
+                if len(nonzero_indices) > 0:
+                    # 対数スケールで計算して数値オーバーフローを防ぐ
+                    log_counts = np.log(visit_counts[nonzero_indices])
+                    log_scaled = log_counts / temperature
+                    # 最大値を引いて数値安定性を確保
+                    max_log = np.max(log_scaled)
+                    exp_scaled = np.exp(log_scaled - max_log)
+                    
+                    # 方策の初期化
+                    mcts_policy = np.zeros(self.board_size * self.board_size)
+                    # 非ゼロ訪問回数の箇所にのみ方策を設定
+                    mcts_policy[nonzero_indices] = exp_scaled / np.sum(exp_scaled)
+                else:
+                    # すべての訪問回数がゼロの場合は一様分布
+                    mcts_policy = np.ones(self.board_size * self.board_size) / (self.board_size * self.board_size)
+            except Exception as e:
+                # エラーが発生した場合は最も訪問回数の多い行動を選択
+                print(f"方策計算中にエラーが発生: {e}")
+                action = np.argmax(visit_counts)
+                mcts_policy = np.zeros(self.board_size * self.board_size)
+                mcts_policy[action] = 1.0
         
         return mcts_policy
+    
+    def _get_move_count(self, state):
+        """現在の手数を計算"""
+        # 0でない要素（石が置かれているマス）の数をカウント
+        return np.count_nonzero(state)
     
     def _select_child(self, node):
         """UCBスコアに基づいて子ノードを選択"""
@@ -494,25 +564,39 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
     # 結果をキューに送信
     result_queue.put((game_idx, final_value))
 
-def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.0005):
-    """ニューラルネットワークの訓練 - パラメータ調整"""
+def train_network(model, replay_buffer, epochs=20, batch_size=512, lr=0.0005):  # エポック数を減らし、バッチサイズを増加
+    """ニューラルネットワークの訓練 - 軽量化バージョン"""
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    
+    # 学習率スケジューラを追加
+    scheduler = ExponentialLR(optimizer, gamma=0.9)
     
     # リプレイバッファからデータを取得
     if len(replay_buffer) < batch_size:
         return 0, 0  # データが十分でない場合はスキップ
-        
-    states, policies, values = replay_buffer.sample(min(len(replay_buffer), 10000))
+    
+    # サンプル数を制限して訓練を高速化
+    max_samples = min(len(replay_buffer), 5000)  # サンプル数上限を設定
+    states, policies, values = replay_buffer.sample(max_samples)
     
     # データセットとデータローダーの作成
     dataset = SelfPlayDataset(states, policies, values)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)  # num_workersを追加
     
+    # 早期停止のための変数
+    best_loss = float('inf')
+    patience = 3
+    patience_counter = 0
+    
+    # 損失を記録する変数を初期化
     total_policy_loss = 0
     total_value_loss = 0
     
-    for _ in range(epochs):
+    for epoch in range(epochs):
+        epoch_policy_loss = 0
+        epoch_value_loss = 0
+        
         for batch_states, batch_policies, batch_values in dataloader:
             batch_states = batch_states.to(device)
             batch_policies = batch_policies.to(device)
@@ -533,23 +617,49 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.0005):
             loss.backward()
             optimizer.step()
             
-            total_policy_loss += policy_loss.item()
-            total_value_loss += value_loss.item()
+            epoch_policy_loss += policy_loss.item()
+            epoch_value_loss += value_loss.item()
+        
+        current_loss = epoch_policy_loss / len(dataloader) + epoch_value_loss / len(dataloader)
+        
+        # 早期停止チェック
+        if current_loss < best_loss:
+            best_loss = current_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
+        
+        # エポックごとに学習率を減衰
+        scheduler.step()
+        
+        # エポックごとの損失を追加
+        total_policy_loss += epoch_policy_loss / len(dataloader)
+        total_value_loss += epoch_value_loss / len(dataloader)
+        
+        # 現在の学習率を出力（デバッグ用）
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch {epoch+1}/{epochs}, LR: {current_lr:.6f}, "
+              f"Policy Loss: {epoch_policy_loss/len(dataloader):.4f}, "
+              f"Value Loss: {epoch_value_loss/len(dataloader):.4f}")
     
-    avg_policy_loss = total_policy_loss / (len(dataloader) * epochs)
-    avg_value_loss = total_value_loss / (len(dataloader) * epochs)
+    avg_policy_loss = total_policy_loss / epochs
+    avg_value_loss = total_value_loss / epochs
     
     return avg_policy_loss, avg_value_loss
 
 class AlphaZero:
     """AlphaZeroの実装"""
     def __init__(self, board_size=19, num_iterations=100, num_self_play_games=64,
-                 checkpoint_dir='models', log_dir='logs'):
+                 checkpoint_dir='models', log_dir='logs', initial_lr=0.0005):
         self.board_size = board_size
         self.num_iterations = num_iterations
         self.num_self_play_games = num_self_play_games
         self.checkpoint_dir = checkpoint_dir
         self.log_dir = log_dir
+        self.initial_lr = initial_lr  # 初期学習率を保存
         
         # ディレクトリの作成
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -559,7 +669,7 @@ class AlphaZero:
         self.model = DualNetwork(board_size).to(device)
         
         # リプレイバッファの初期化
-        self.replay_buffer = ReplayBuffer(capacity=17000)
+        self.replay_buffer = ReplayBuffer(capacity=40000)
         
         # タイムスタンプの作成（モデルとログの両方で使用）
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -579,6 +689,8 @@ class AlphaZero:
         self.value_loss_history = []
         # イテレーション番号を追跡するリストを追加
         self.iterations = []
+        # 学習率の履歴を記録するリストを追加
+        self.lr_history = []
         
         # 既存のモデルをロード
         if os.path.exists(self.model_path):
@@ -618,6 +730,15 @@ class AlphaZero:
             start_time = time.time()
             print(f"\nイテレーション {iteration+1}/{self.num_iterations}")
             
+            # イテレーションが進むにつれて初期学習率を調整
+            # 例：20イテレーションごとに初期学習率を半分にする
+            current_lr = self.initial_lr * (0.5 ** (iteration // 20))
+            print(f"現在の初期学習率: {current_lr:.6f}")
+            self.lr_history.append(current_lr)
+            
+            # イテレーション番号を追加（重複しないように一度だけ追加）
+            current_iter = iteration + 1
+            
             # 1. 自己対戦でデータ生成（並列）
             print("自己対戦でデータを生成中...")
             self._generate_self_play_data()
@@ -625,24 +746,25 @@ class AlphaZero:
             # 自己対戦後のモデルを保存
             self.save_model("after_selfplay", iteration+1)
             
-            # 自己対戦後の状態をグラフ化して保存
-            self._plot_loss_history(stage="after_selfplay", iteration=iteration+1)
+            # 自己対戦後の状態をグラフ化して保存（データがない段階ではLR履歴のみ）
+            self._plot_loss_history(stage="after_selfplay", iteration=current_iter)
             
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
-            policy_loss, value_loss = train_network(self.model, self.replay_buffer)
+            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr)
             print(f"Policy Loss: {policy_loss:.4f}, Value Loss: {value_loss:.4f}")
             
             # 損失履歴に追加
-            self.policy_loss_history.append(policy_loss)
-            self.value_loss_history.append(value_loss)
-            self.iterations.append(iteration+1)
+            if policy_loss > 0:  # 正常な損失値の場合のみ追加
+                self.policy_loss_history.append(policy_loss)
+                self.value_loss_history.append(value_loss)
+                self.iterations.append(current_iter)
             
             # 訓練後のモデルを保存
             self.save_model("trained", iteration+1)
             
             # 訓練後の状態をグラフ化して保存
-            self._plot_loss_history(stage="after_training", iteration=iteration+1)
+            self._plot_loss_history(stage="after_training", iteration=current_iter)
             
             # 3. トレーニング情報をログファイルに保存
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -652,6 +774,7 @@ class AlphaZero:
                 f.write(f"Training Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"Model Path: {self.model_path}\n")
                 f.write(f"Iteration: {iteration+1}/{self.num_iterations}\n")
+                f.write(f"Initial Learning Rate: {current_lr:.6f}\n")
                 f.write(f"Policy Loss: {policy_loss:.6f}\n")
                 f.write(f"Value Loss: {value_loss:.6f}\n")
                 f.write(f"Replay Buffer Size: {len(self.replay_buffer)}\n")
@@ -672,10 +795,7 @@ class AlphaZero:
     
     def _plot_loss_history(self, final=False, stage=None, iteration=None):
         """損失の履歴をグラフ化して保存"""
-        if len(self.policy_loss_history) == 0:
-            return  # 損失データがない場合は何もしない
-            
-        plt.figure(figsize=(15, 10))
+        plt.figure(figsize=(15, 15))  # グラフのサイズを大きくして3つのグラフを表示
         
         # グラフタイトルに情報を追加
         title_suffix = ""
@@ -684,19 +804,36 @@ class AlphaZero:
         elif stage and iteration:
             title_suffix = f" ({stage}, Iteration {iteration})"
         
-        # 2つのグラフを並べて表示
-        plt.subplot(2, 1, 1)
-        plt.plot(self.iterations, self.policy_loss_history, 'b-', marker='o')
-        plt.title(f'Policy Loss History{title_suffix}')
-        plt.xlabel('Iteration')
-        plt.ylabel('Policy Loss')
-        plt.grid(True)
+        # 学習率の履歴データを準備
+        lr_iterations = list(range(1, len(self.lr_history) + 1))
         
-        plt.subplot(2, 1, 2)
-        plt.plot(self.iterations, self.value_loss_history, 'r-', marker='o')
-        plt.title(f'Value Loss History{title_suffix}')
+        # 最終的な表示領域を3つに分割
+        total_subplots = 3 if len(self.policy_loss_history) > 0 else 1
+        
+        # Policy Lossグラフ (データがある場合のみ)
+        if len(self.policy_loss_history) > 0:
+            plt.subplot(total_subplots, 1, 1)  # total_subplots行1列の1番目
+            plt.plot(self.iterations, self.policy_loss_history, 'b-', marker='o')
+            plt.title(f'Policy Loss History{title_suffix}')
+            plt.xlabel('Iteration')
+            plt.ylabel('Policy Loss')
+            plt.grid(True)
+            
+            # Value Lossグラフ
+            plt.subplot(total_subplots, 1, 2)  # total_subplots行1列の2番目
+            plt.plot(self.iterations, self.value_loss_history, 'r-', marker='o')
+            plt.title(f'Value Loss History{title_suffix}')
+            plt.xlabel('Iteration')
+            plt.ylabel('Value Loss')
+            plt.grid(True)
+        
+        # 学習率の履歴を追加 (常に表示)
+        plt.subplot(total_subplots, 1, total_subplots)  # 最後の位置
+        plt.plot(lr_iterations, self.lr_history, 'g-', marker='o')
+        plt.title(f'Learning Rate History{title_suffix}')
         plt.xlabel('Iteration')
-        plt.ylabel('Value Loss')
+        plt.ylabel('Learning Rate')
+        plt.yscale('log')  # 学習率は対数スケールで表示
         plt.grid(True)
         
         # グラフ下部に現在の訓練状況を表示
@@ -789,8 +926,8 @@ class AlphaZero:
         model.to(device)
         model.eval()
         
-        # MCTSの初期化 (Gumbelを使用)
-        mcts = MCTS(model, num_simulations=400, use_gumbel=True, gumbel_scale=0.05)  # シミュレーション回数増加
+        # MCTSの初期化 (シミュレーション回数を削減)
+        mcts = MCTS(model, num_simulations=200, use_gumbel=True, gumbel_scale=0.05)
         
         for game_idx in game_indices:
             # 環境の初期化
@@ -832,10 +969,15 @@ class AlphaZero:
                 # プレイヤーに応じた報酬の調整
                 adjusted_value = final_value * hist_player
                 
-                # 対称性を活用してデータを拡張（8倍に）
-                augmented_states, augmented_policies = mcts._augment_data(hist_state, hist_policy)
-                for aug_state, aug_policy in zip(augmented_states, augmented_policies):
-                    shared_buffer.append((aug_state, aug_policy, adjusted_value))
+                # 一定確率でのみデータ拡張を行う
+                if np.random.random() < 0.25:  # 25%の確率でのみ拡張
+                    # 対称性を活用してデータを拡張（8倍に）
+                    augmented_states, augmented_policies = mcts._augment_data(hist_state, hist_policy)
+                    for aug_state, aug_policy in zip(augmented_states, augmented_policies):
+                        shared_buffer.append((aug_state, aug_policy, adjusted_value))
+                else:
+                    # 拡張せずオリジナルのデータのみ追加
+                    shared_buffer.append((hist_state, hist_policy, adjusted_value))
             
             # 結果をキューに送信
             result_queue.put((game_idx, final_value))
@@ -845,8 +987,8 @@ class AlphaZero:
         env = GomokuEnv(board_size=self.board_size)
         state = env.board.GetBoardInt()
         
-        # MCTSの初期化 (対戦時はGumbelを無効化)
-        mcts = MCTS(self.model, num_simulations=800, use_gumbel=False)  # 実戦時はシミュレーション回数を増やす
+        # MCTSの初期化 (対戦時はシミュレーション回数を適度に)
+        mcts = MCTS(self.model, num_simulations=400, use_gumbel=False)  # 実戦時もシミュレーション回数を適正化
         
         done = False
         human_first = input("先手で始めますか？ (y/n): ").lower() == 'y'
@@ -894,13 +1036,13 @@ class AlphaZero:
 
 if __name__ == "__main__":
     # ボードサイズ（15x15は標準的な五目並べのサイズ）
-    board_size = 7
+    board_size = 8
     
-    # AlphaZeroの初期化 - 本番用パラメータ
+    # AlphaZeroの初期化 - 軽量化パラメータ
     alpha_zero = AlphaZero(
         board_size=board_size,
-        num_iterations=100,     # 5120から100に削減 - 実用的なトレーニング回数
-        num_self_play_games=64, # 256から64に削減 - 効率的なデータ生成数
+        num_iterations=10000,
+        num_self_play_games=24*3, # 自己対戦ゲーム数をさらに削減
     )
     
     # MCTSクラス内のnum_simulationsを調整

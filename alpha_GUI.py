@@ -183,5 +183,5 @@ class AlphaGomokuGUI:
                     waiting = False
 
 # 実行部分
-gui = AlphaGomokuGUI(board_size=7, model_path='models/alpha_gomoku_7_20250524_084916.pth')
+gui = AlphaGomokuGUI(board_size=7, model_path='models/alpha_gomoku_7_iter25_20250530_145401.pth')
 gui.run()
