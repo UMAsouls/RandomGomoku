@@ -299,6 +299,14 @@ class MCTS:
         for action, child in root.children.items():
             visit_counts[action] = child.visit_count
         
+        # 勝ち確定手がある場合は、MCTSの探索結果に関わらず勝ち確定手を選択
+        if winning_moves:
+            mcts_policy = np.zeros(self.board_size * self.board_size)
+            # 複数の勝ち確定手がある場合はその中から一つをランダムに選択
+            winning_move = random.choice(winning_moves)
+            mcts_policy[winning_move] = 1.0
+            return mcts_policy
+        
         # 現在の手数に基づいて温度パラメータを決定
         move_count = self._get_move_count(state)
         # 序盤（最初の30手）は温度1.0、それ以降は温度をほぼゼロにする
@@ -746,9 +754,6 @@ class AlphaZero:
             # 自己対戦後のモデルを保存
             self.save_model("after_selfplay", iteration+1)
             
-            # 自己対戦後の状態をグラフ化して保存（データがない段階ではLR履歴のみ）
-            self._plot_loss_history(stage="after_selfplay", iteration=current_iter)
-            
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
             policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr)
@@ -763,8 +768,8 @@ class AlphaZero:
             # 訓練後のモデルを保存
             self.save_model("trained", iteration+1)
             
-            # 訓練後の状態をグラフ化して保存
-            self._plot_loss_history(stage="after_training", iteration=current_iter)
+            # イテレーション完了時に1回だけグラフを保存
+            self._plot_loss_history(iteration=current_iter)
             
             # 3. トレーニング情報をログファイルに保存
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -787,12 +792,9 @@ class AlphaZero:
             iteration_time = time.time() - start_time
             print(f"イテレーション完了: {iteration_time:.2f} 秒")
         
-        # トレーニング終了時に最終的な損失グラフを保存
-        self._plot_loss_history(final=True)
-        
-        # トレーニング完了時の最終モデルを保存
+        # トレーニング終了時の最終モデルを保存
         self.save_model("final")
-    
+
     def _plot_loss_history(self, final=False, stage=None, iteration=None):
         """損失の履歴をグラフ化して保存"""
         plt.figure(figsize=(15, 15))  # グラフのサイズを大きくして3つのグラフを表示
@@ -801,8 +803,8 @@ class AlphaZero:
         title_suffix = ""
         if final:
             title_suffix = " (Final)"
-        elif stage and iteration:
-            title_suffix = f" ({stage}, Iteration {iteration})"
+        elif iteration:
+            title_suffix = f" (Iteration {iteration})"
         
         # 学習率の履歴データを準備
         lr_iterations = list(range(1, len(self.lr_history) + 1))
@@ -844,21 +846,12 @@ class AlphaZero:
         
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         
-        # ファイル名の作成
-        parts = []
-        if final:
-            parts.append("final")
-        if stage:
-            parts.append(stage)
-        if iteration:
-            parts.append(f"iter{iteration}")
-            
-        prefix = "_".join(parts)
-        if prefix:
-            prefix += "_"
-            
+        # ファイル名の作成（シンプル化）
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        plot_filename = os.path.join(self.timestamp_log_dir, f'{prefix}loss_history_{timestamp}.png')
+        if iteration:
+            plot_filename = os.path.join(self.timestamp_log_dir, f'loss_history_iter{iteration}_{timestamp}.png')
+        else:
+            plot_filename = os.path.join(self.timestamp_log_dir, f'loss_history_final_{timestamp}.png')
         
         plt.savefig(plot_filename, dpi=150)
         plt.close()
@@ -970,7 +963,7 @@ class AlphaZero:
                 adjusted_value = final_value * hist_player
                 
                 # 一定確率でのみデータ拡張を行う
-                if np.random.random() < 0.25:  # 25%の確率でのみ拡張
+                if np.random.random() < 0.75:  # 25%の確率でのみ拡張
                     # 対称性を活用してデータを拡張（8倍に）
                     augmented_states, augmented_policies = mcts._augment_data(hist_state, hist_policy)
                     for aug_state, aug_policy in zip(augmented_states, augmented_policies):
