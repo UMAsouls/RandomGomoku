@@ -29,9 +29,6 @@ class DualNetwork(nn.Module):
         self.conv_input = nn.Conv2d(1, num_channels, 3, stride=1, padding=1)
         self.bn_input = nn.BatchNorm2d(num_channels)
         
-        # プーリング層の追加
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        
         # 残差ブロック
         self.res_blocks_low = nn.ModuleList([
             self._build_res_block(num_channels) for _ in range(num_res_blocks)
@@ -67,15 +64,12 @@ class DualNetwork(nn.Module):
         # 入力層
         x = F.relu(self.bn_input(self.conv_input(x)))
         
-        # プーリングで空間的サイズを縮小 - 広域的特徴の抽出
-        x_pooled = self.pool(x)
-        
-        #残差ブロック処理
+        # 残差ブロック処理
         for res_block in self.res_blocks_low:
-            residual = x_pooled
-            x_pooled = res_block(x_pooled)
-            x_pooled += residual
-            x_pooled = F.relu(x_pooled)
+            residual = x
+            x = res_block(x)
+            x += residual
+            x = F.relu(x)
         
 
 
