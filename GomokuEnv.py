@@ -55,9 +55,9 @@ class GomokuEnv:
             if self.current_player == self.train_player:
                 reward += 1  # 黒が勝った
             else:
-                reward += -1  # 白が勝った
+                reward += 0  # 白が勝った
         else:
-            reward += 0
+            reward += 0.5
 
         # 次のプレイヤーに交代
         self.current_player = 3 - self.current_player
