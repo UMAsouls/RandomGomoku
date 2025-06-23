@@ -1,13 +1,13 @@
 import numpy as np
 
-from NTupleNetwork import NTupleNetwork
-from ReplayBuffer import ReplayBuffer
+from N_Tuple.NTupleNetwork import NTupleNetwork
+from N_Tuple.ReplayBuffer import ReplayBuffer
 
 
 BATCH_SIZE = 32
 BUFFER_SIZE = 10000
 LEARNING_RATE = 0.0005
-EPSILON = 0.1  # ε-greedy法のε値
+EPSILON = 0.15  # ε-greedy法のε値
 
 
 class NTupleQAgent:
@@ -19,10 +19,21 @@ class NTupleQAgent:
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.ntuple_network = NTupleNetwork(board_size=board_size, learning_rate=self.learning_rate)
         
+    def random_empty_action(self, board: np.ndarray) -> int:
+        # ランダムに手を選ぶ
+        # 空いている場所をランダムに選ぶ
+        empty_indices = np.where(board == 0)
+        empty = np.array(empty_indices).T  # 空いている場所の座標を取得
+        if len(empty) == 0:
+            raise ValueError("空いている場所がありません")
+        pos = empty[np.random.choice(len(empty))]  # ランダムに1つ選ぶ
+        action = pos[0] * board.shape[1] + pos[1]
+        return action
+        
     def select_action(self, board: np.ndarray) -> int:
         if np.random.rand() < self.epsilon:
-            # ランダムに手を選ぶ
-            return np.random.randint(0, board.size)
+            return self.random_empty_action(board)
+            
         else:
             # N-tupleネットワークを使用して最適な手を選ぶ
             scores = self.ntuple_network.forward(board)

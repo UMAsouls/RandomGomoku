@@ -1,7 +1,7 @@
 import numpy as np
 import collections
 
-from ReplayBuffer import Experience
+from N_Tuple.ReplayBuffer import Experience
 
 # N-tupleの取り出し座標を作成
 def make_ntuple(self, n: int, x: int, y: int, dx: int, dy: int) -> np.ndarray:
@@ -103,6 +103,7 @@ class NTupleNetwork:
         for i in range(self.board_size**2):
             if board[i // self.board_size, i % self.board_size] != 0:
                 scores[i] = -1
+                continue
             
             board_copy = board.copy()
             board_copy[i // self.board_size, i % self.board_size] = 1

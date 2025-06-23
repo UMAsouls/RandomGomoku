@@ -7,7 +7,9 @@ from RandomGomoku.const import Stone
 class Mass(IMass,CreatingMass):
     
     
-    def __init__(self) -> None:
+    def __init__(self, x, y) -> None:
+        self.x :int = x
+        self.y :int = y
         
         #方向に合わせたマス
         self.__topleft :Mass = None
@@ -126,10 +128,12 @@ class Mass(IMass,CreatingMass):
         if(kind != self.stone ): 
             return count
         
+        count += 1
+        print(f"count: {count} dir: {dir} stone: {self.stone} pos: ({self.x},{self.y})")
         if(self.__around[dir[1]][dir[0]] == None): 
-            return count + 1
+            return count
         
-        return self.__around[dir[1]][dir[0]].Count(dir,count+1,kind)
+        return self.__around[dir[1]][dir[0]].Count(dir,count,kind)
         
         
     def GetStatus(self) -> int:
