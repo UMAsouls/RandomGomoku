@@ -26,7 +26,7 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-    def get_batch(self) -> np.ndarray:
+    def get_batch(self) -> list[Experience]:
         batch = np.random.choice(self.buffer, self.batch_size, replace=False)
         
         return batch

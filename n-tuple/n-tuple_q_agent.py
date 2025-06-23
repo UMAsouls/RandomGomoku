@@ -35,10 +35,9 @@ class NTupleQAgent:
             return
         
         batch = self.replay_buffer.get_batch()
-        states, actions, rewards, next_states, dones = zip(*batch)
         
         # N-tupleネットワークの学習
-        for i in range(len(states)):
-            tderror = rewards[i] + (1 - dones[i]) * np.max(self.ntuple_network.forward(next_states[i])) - \
-                      self.ntuple_network.forward(states[i])[actions[i]]
-            self.ntuple_network.learn(states[i], tderror)
+        for exp in batch:
+            tderror = exp.reward + (1 - exp.done) * np.max(self.ntuple_network.forward(exp.next_state)) - \
+                      self.ntuple_network.forward(exp.state)[exp.action]
+            self.ntuple_network.learn(exp.state, tderror)
