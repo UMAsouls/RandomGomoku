@@ -76,9 +76,7 @@ class GomokuEnv:
 
 
     def get_board(self):
-        if self.current_player == 1:
-            return np.array(self.board.GetBoardInt())
-        else:
+        if self.current_player != 1 and self.train_player == 0:
             # 白の視点でボードを返す
             inverted_board = np.zeros_like(self.board.GetBoardInt())
             for y in range(self.board_size):
@@ -88,6 +86,9 @@ class GomokuEnv:
                     elif self.board.GetBoardInt()[y][x] == 2:
                         inverted_board[y][x] = 1
             return inverted_board
+        else:
+            # 黒の視点でボードを返す
+            return np.array(self.board.GetBoardInt())
 
     def get_human_action(self):
         while True:

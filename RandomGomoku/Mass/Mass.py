@@ -129,7 +129,7 @@ class Mass(IMass,CreatingMass):
             return count
         
         count += 1
-        print(f"count: {count} dir: {dir} stone: {self.stone} pos: ({self.x},{self.y})")
+        #print(f"count: {count} dir: {dir} stone: {self.stone} pos: ({self.x},{self.y})")
         if(self.__around[dir[1]][dir[0]] == None): 
             return count
         

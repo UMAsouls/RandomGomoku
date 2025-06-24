@@ -6,8 +6,8 @@ from N_Tuple.ReplayBuffer import ReplayBuffer
 
 BATCH_SIZE = 32
 BUFFER_SIZE = 10000
-LEARNING_RATE = 0.0005
-EPSILON = 0.15  # ε-greedy法のε値
+LEARNING_RATE = 0.01
+EPSILON = 0.01  # ε-greedy法のε値
 
 
 class NTupleQAgent:
@@ -36,19 +36,31 @@ class NTupleQAgent:
             
         else:
             # N-tupleネットワークを使用して最適な手を選ぶ
-            scores = self.ntuple_network.forward(board)
-            return np.argmax(scores)
+            scores = self.ntuple_network.evaluate(board)
+            
+            max_value = np.max(scores)
+            if max_value <= 0:
+                return self.random_empty_action(board)
+            indices = np.where(scores == max_value)[0]  # 最大値のインデックスを取得
+            action = np.random.choice(indices)
+            return action
         
     def update(self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool):
+        """
         self.replay_buffer.add(state, action, reward, next_state, done)
         
         if len(self.replay_buffer) < self.batch_size:
             return
         
         batch = self.replay_buffer.get_batch()
+        """
+        q = self.ntuple_network.evaluate(state)
+        
+        tdtarget = reward + (1 - done) * np.max(self.ntuple_network.evaluate(next_state))
+        tderror = -tdtarget - q[action]
+        
+        self.ntuple_network.learn(state, tderror, q[action])
+        
         
         # N-tupleネットワークの学習
-        for exp in batch:
-            tderror = exp.reward + (1 - exp.done) * np.max(self.ntuple_network.forward(exp.next_state)) - \
-                      self.ntuple_network.forward(exp.state)[exp.action]
-            self.ntuple_network.learn(exp.state, tderror)
+            

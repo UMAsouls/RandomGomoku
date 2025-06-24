@@ -3,8 +3,10 @@ import collections
 
 from N_Tuple.ReplayBuffer import Experience
 
+INF = 100
+
 # N-tupleの取り出し座標を作成
-def make_ntuple(self, n: int, x: int, y: int, dx: int, dy: int) -> np.ndarray:
+def make_ntuple(n: int, x: int, y: int, dx: int, dy: int) -> np.ndarray:
     ntuple = np.zeros((n, 2), dtype=np.int32)
     for i in range(n):
         ntuple[i] = (x + i * dx, y + i * dy)
@@ -17,8 +19,8 @@ class NTupleBoard:
         self.n = n
         self.board_size = board_size
         
-        self.tuples = np.zeros((board_size**2), dtype=object)
-        self.lut = np.zeros((board_size**2, 3**n), dtype=np.float64)  # ルックアップテーブルの初期化
+        self.tuples = np.zeros((board_size**2, n, 2), dtype=np.int32)
+        self.lut: np.ndarray = np.zeros((3**n), dtype=np.float64)  # ルックアップテーブルの初期化
         
         self.define_tuples(dir)
     
@@ -36,14 +38,13 @@ class NTupleBoard:
                 # 各方向に対してN-tupleを生成
                 ntuple = make_ntuple(self.n, x, y, dx, dy)
                 self.tuples[y * self.board_size + x] = ntuple
-                self.lut[y * self.board_size + x] = np.zeros((3**self.n), dtype=np.float64)
         
     def evaluate(self, board: np.ndarray) -> float:
         # ボードの状態に基づいてルックアップテーブルのインデックスを取得
         indices = self.get_lut_indices(board)
         
         # ルックアップテーブルからスコアを取得
-        score = np.sum(self.lut[np.arange(self.board_size**2), indices])
+        score = np.sum(self.lut[indices])
         
         return score
     
@@ -66,9 +67,11 @@ class NTupleBoard:
         
         return indices
 
-    def update_lut(self):
+    def update_lut(self, board: np.ndarray, tderror: float, lr: float, y:float) -> None:
         # ルックアップテーブルの更新ロジックを実装
-        pass
+        indices = self.get_lut_indices(board)
+        #yはモデルの出力値（tanh関数を通したスコア）
+        self.lut[indices] -= lr * tderror * (1- y**2)    
 
     def get_tuples(self):
         return self.tuples
@@ -85,6 +88,13 @@ class NTupleNetwork:
         self.learning_rate = learning_rate
         
         self.n_tuples: list[NTupleBoard] = []
+        self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
+        
+    def init_weights(self, mu: float = 0, sigma: float = 1) -> None:
+        # ルックアップテーブルの初期化
+        rng = np.random.default_rng()
+        for ntuple in self.n_tuples:
+            ntuple.lut = rng.normal(mu, sigma, ntuple.lut.shape)
         
     def define_all_dir_n_tuples(self, n:int) -> None:
         self.n_tuples: list[NTupleBoard] = [
@@ -96,29 +106,38 @@ class NTupleNetwork:
         
     def define_tuples(self) -> None:
         self.define_all_dir_n_tuples(5)
+        #self.init_weights()  # ルックアップテーブルの初期化
         
     # 盤面の状態から選択可能な手を評価するメソッド
-    def forward(self, board: np.ndarray) -> np.ndarray:
+    def evaluate(self, board: np.ndarray) -> np.ndarray:
         scores = np.zeros((self.board_size**2), dtype=np.float64)
         for i in range(self.board_size**2):
-            if board[i // self.board_size, i % self.board_size] != 0:
-                scores[i] = -1
+            y = i // self.board_size
+            x = i % self.board_size
+            
+            if board[y, x] != 0:
+                scores[i] = -1*INF  # すでに石が置かれている場所はスコアを-∞に設定
                 continue
             
-            board_copy = board.copy()
-            board_copy[i // self.board_size, i % self.board_size] = 1
+            before_value = board[y, x]
+            board[y, x] = 1
             # 空いている場所に対してN-tupleを評価
             score = 0
             for ntuple in self.n_tuples:
-                score += ntuple.evaluate(board_copy)
+                score += ntuple.evaluate(board)
+                
+            board[y, x] = before_value  # 元の状態に戻す
             
-            scores[i] = score
+            
+            # スコアをtanh関数で正規化
+            # ここではスコアを-1から1の範囲に収める
+            scores[i] = np.tanh(score)
             
         return scores
     
     
-    def learn(self, board:np.ndarray, tderror: float) -> None:
+    def learn(self, board:np.ndarray, tderror: float, y:float) -> None:
         for ntuple in self.n_tuples:
-            indices = ntuple.get_lut_indices(board)
-            ntuple.lut[np.arange(ntuple.board_size**2), indices] += self.learning_rate * tderror
+            ntuple.update_lut(board, tderror, self.learning_rate, y)
+            
             
