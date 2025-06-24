@@ -13,31 +13,38 @@ def make_ntuple(n: int, x: int, y: int, dx: int, dy: int) -> np.ndarray:
         
     return ntuple
 
-# 盤面に存在しうる1方向のN-tuple全てに対し、評価を行うクラス
+# 盤面に存在しうる縦横斜め方向のN-tuple全てに対し、評価を行うクラス
 class NTupleBoard:
-    def __init__(self, n: int, board_size: int, dir: tuple[int,int]) -> None:
+    def __init__(self, n: int, board_size: int) -> None:
         self.n = n
         self.board_size = board_size
+
+        self.dirs = ((1, 0), (0, 1), (1, 1), (1, -1))  # 横、縦、斜め右下、斜め左下
         
-        self.tuples = np.zeros((board_size**2, n, 2), dtype=np.int32)
+        self.tuples = np.zeros(((board_size**2)*len(self.dirs), n, 2), dtype=np.int32)
         self.lut: np.ndarray = np.zeros((3**n), dtype=np.float64)  # ルックアップテーブルの初期化
+
+        self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
         
-        self.define_tuples(dir)
     
-    # 指定された方向に対してN-tuple（座標のリスト）を定義するメソッド
-    def define_tuples(self, dir: tuple[int,int]) -> None:
-        dx, dy = dir
-        
-        y_start = 0 if dy >= 0 else self.n - 1
-        x_start = 0 if dx >= 0 else self.n - 1
-        y_goal = self.board_size if dy <= 0 else self.board_size - self.n
-        x_goal = self.board_size if dx <= 0 else self.board_size - self.n
-        
-        for y in range(y_start, y_goal):
-            for x in range(x_start, x_goal):
-                # 各方向に対してN-tupleを生成
-                ntuple = make_ntuple(self.n, x, y, dx, dy)
-                self.tuples[y * self.board_size + x] = ntuple
+    # 全方向に対してN-tuple（座標のリスト）を定義するメソッド
+    def define_tuples(self) -> None:
+        idx = 0
+        for dir in self.dirs:
+            dx, dy = dir
+
+            y_start = 0 if dy >= 0 else self.n - 1
+            x_start = 0 if dx >= 0 else self.n - 1
+            y_goal = self.board_size if dy <= 0 else self.board_size - self.n
+            x_goal = self.board_size if dx <= 0 else self.board_size - self.n
+
+            for y in range(y_start, y_goal):
+                for x in range(x_start, x_goal):
+                    # 各方向に対してN-tupleを生成
+                    ntuple = make_ntuple(self.n, x, y, dx, dy)
+                    self.tuples[(self.board_size**2)*idx + (y * self.board_size + x)] = ntuple
+
+            idx += 1
         
     def evaluate(self, board: np.ndarray) -> float:
         # ボードの状態に基づいてルックアップテーブルのインデックスを取得
@@ -96,16 +103,11 @@ class NTupleNetwork:
         for ntuple in self.n_tuples:
             ntuple.lut = rng.normal(mu, sigma, ntuple.lut.shape)
         
-    def define_all_dir_n_tuples(self, n:int) -> None:
-        self.n_tuples: list[NTupleBoard] = [
-            NTupleBoard(n, self.board_size, (1, 0)),  # 横方向
-            NTupleBoard(n, self.board_size, (0, 1)),  # 縦方向
-            NTupleBoard(n, self.board_size, (1, 1)),  # 斜め右下方向
-            NTupleBoard(n, self.board_size, (1, -1))  # 斜め左下方向
-        ]
+    def add_all_dir_n_tuples(self, n:int) -> None:
+        self.n_tuples.append(NTupleBoard(n, self.board_size))
         
     def define_tuples(self) -> None:
-        self.define_all_dir_n_tuples(5)
+        self.add_all_dir_n_tuples(10)
         #self.init_weights()  # ルックアップテーブルの初期化
         
     # 盤面の状態から選択可能な手を評価するメソッド
