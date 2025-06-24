@@ -7,12 +7,46 @@ from RandomGomoku.const import Stone
 
 from RandomGomoku.Board.RandomSetter import RandomSetter
 
+import numpy as np
+
+class FastBoard:
+    def __init__(self, board: list[list[int]]) -> None:
+        self.__board: np.ndarray = np.array(board, dtype=np.int32)
+        self.__board_white: np.ndarray = np.where(self.__board == Stone.WHITE, 1, 0)
+        self.__board_black: np.ndarray = np.where(self.__board == Stone.BLACK, 1, 0)
+        
+    def GetBoard(self) -> list[list[int]]:
+        return self.__board
+    
+    def GetStatus(self, x: int, y: int) -> int:
+        return self.__board[y][x]
+    
+    def GetStatusFromWhite(self, x: int, y: int) -> int:
+        if self.__board_white[y][x] == 1:
+            return 1
+        elif self.__board_black[y][x] == 1:
+            return 2
+        else:
+            return 0
+        
+    def GetStatusFromBlack(self, x: int, y: int) -> int:
+        if self.__board_black[y][x] == 1:
+            return 1
+        elif self.__board_white[y][x] == 1:
+            return 2
+        else:
+            return 0
+    
+    def SetStatus(self, x: int, y: int, status: int) -> None:
+        self.__board[y][x] = status
+
 class Board():
     
     @inject
     def __init__(self, headmass: IHeadMass) -> None:
         self.__headmass: IHeadMass = headmass
         self.__board: list[list[IMass]] = []
+        self.__board_int: FastBoard = FastBoard([])
         
         self.__width: int = -1
         self.__height: int = -1
@@ -66,6 +100,8 @@ class Board():
         self.__height = h
         
         self.RandomSet()
+
+        self.__board_int = FastBoard(self.GetBoardInt())
         
         
     def GetBoardInt(self) -> list[list[int]]:
@@ -75,6 +111,9 @@ class Board():
             ]
             for j in self.__board
         ]
+    
+    def GetFastBoard(self) -> FastBoard:
+        return self.__board_int
         
         
     def PrintBoard(self) -> None:
