@@ -36,6 +36,14 @@ class FastBoard:
             return 2
         else:
             return 0
+        
+    def GetStatusFrom(self, x: int, y: int, player: int) -> int:
+        if player == Stone.WHITE:
+            return self.GetStatusFromWhite(x, y)
+        elif player == Stone.BLACK:
+            return self.GetStatusFromBlack(x, y)
+        else:
+            raise ValueError("Invalid player type. Use Stone.WHITE or Stone.BLACK.")
     
     def SetStatus(self, x: int, y: int, status: int) -> None:
         self.__board[y][x] = status

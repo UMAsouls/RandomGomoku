@@ -72,7 +72,7 @@ class GomokuEnv:
         # 次のプレイヤーに交代
         self.current_player = 3 - self.current_player
         
-        return self.board.copy(), reward, done, {}
+        return self.get_board(), reward, done, {}
 
 
     def get_board(self):
