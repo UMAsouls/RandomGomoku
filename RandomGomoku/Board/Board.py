@@ -36,27 +36,70 @@ class BoardWB:
             return 0
 
 class FastBoard:
-    def __init__(self, board: list[list[int]]) -> None:
-        self.__board: np.ndarray = np.array(board, dtype=np.int32)
-        self.__board_white: np.ndarray = np.where(self.__board == WHITEINT, 1, 0)
-        self.__board_black: np.ndarray = np.where(self.__board == BLACKINT, 1, 0)
+    def __init__(self) -> None:
+        self.__board: np.ndarray
+    
+    def RandomSet(self):
+        w = self.__board.shape[1]
+        h = self.__board.shape[0]
         
-        self.__board_wb = BoardWB(self.__board_black, self.__board_white)
+        white_rand_size = (w*2//5, h*2//5)
+        black_rand_size = (w*1//5, h*1//5)
+        
+        white_rand1: RandomSetter = RandomSetter(0, 0, white_rand_size[0], white_rand_size[1])
+        white_rand2: RandomSetter = RandomSetter(w-white_rand_size[0], 0, white_rand_size[0], white_rand_size[1])
+        white_rand3: RandomSetter = RandomSetter(0, h-white_rand_size[1], white_rand_size[0], white_rand_size[1])
+        white_rand4: RandomSetter = RandomSetter(w-white_rand_size[0], h-white_rand_size[1], white_rand_size[0], white_rand_size[1])
+        
+        white_rands: list[RandomSetter] = [
+            white_rand1,white_rand2,white_rand3,white_rand4
+        ]
+        
+        black_rand1: RandomSetter = RandomSetter(black_rand_size[0], 0, black_rand_size[0], h)
+        black_rand2: RandomSetter = RandomSetter(0, black_rand_size[1], w, black_rand_size[1])
+        
+        black_rands: list[RandomSetter] = [
+            black_rand1, black_rand2
+        ]
+        
+        for i in white_rands:
+            pos = i.RandomMassGet()
+            self.SetStone(pos[0], pos[1], Stone.WHITE)
+            
+        
+        bpos1 = black_rand1.RandomMassGet()
+        bpos2 = black_rand2.RandomMassGet()
+        
+        if(randint(0,1) == 0): bpos = bpos1
+        else: bpos = bpos2
+        
+        self.SetStone(bpos[0], bpos[1], Stone.BLACK)
+    
+    def MakeBoard(self, w:int, h:int):
+        self.__board: np.ndarray = np.zeros((w,h), dtype=np.int32)
+        
+        self.__board_oppose = np.zeros((w,h), dtype=np.int32)
+        
+        self.__board_wb = [self.__board, self.__board_oppose]
+        
+        self.RandomSet()
+        
+        
         
     def GetBoardInt(self) -> np.ndarray:
         return self.__board
     
-    def GetBoardWB(self) -> BoardWB:
-        return self.__board_wb
+    def GetBoardOppose(self) -> np.ndarray:
+        return self.__board_oppose
     
     def GetStatus(self, x: int, y: int) -> int:
         return self.__board[y][x]
     
     def SetStone(self, x: int, y: int, stone: Stone) -> bool:
         self.__board[y][x] = BLACKINT if stone == Stone.BLACK else WHITEINT
+        self.__board_oppose[y][x] = WHITEINT if stone == Stone.BLACK else BLACKINT
         
         player = BLACKINT if stone == Stone.BLACK else WHITEINT
-        self.__board_wb.SetStatus(x,y,player)
         
         return self.JudgeWin(x, y, player)
         
@@ -66,25 +109,25 @@ class FastBoard:
         
         # Check horizontal
         horizon_count = self.CountByDir(x, y, 1, 0, player) + self.CountByDir(x, y, -1, 0, player) - 1
-        print(f"horizon: {horizon_count}")
+        #print(f"horizon: {horizon_count}")
         if horizon_count >= 5:
             return True
         
         # Check vertical
         vertical_count = self.CountByDir(x, y, 0, 1, player) + self.CountByDir(x, y, 0, -1, player) - 1
-        print(f"vertical: {vertical_count}")
+        #print(f"vertical: {vertical_count}")
         if vertical_count >= 5:
             return True
         
         # Check diagonal /
         diagonal1_count = self.CountByDir(x, y, 1, -1, player) + self.CountByDir(x, y, -1, 1, player) - 1
-        print(f"diagonal /: {diagonal1_count}")
+        #print(f"diagonal /: {diagonal1_count}")
         if diagonal1_count >= 5:
             return True
         
         # Check diagonal \
         diagonal2_count = self.CountByDir(x, y, 1, 1, player) + self.CountByDir(x, y, -1, -1, player) - 1
-        print(f"diagonal \\ : {diagonal2_count}")
+        #print(f"diagonal \\ : {diagonal2_count}")
         if diagonal2_count >= 5:
             return True
         
@@ -94,7 +137,7 @@ class FastBoard:
         px, py = x, y
         count = 0
         while 0 <= px < self.__board.shape[1] and 0 <= py < self.__board.shape[0]:
-            if self.__board_wb.GetStatusFrom(px, py, player) == 1:
+            if self.__board_wb[player-1][py,px] == 1:
                 count += 1
             else:
                 break

@@ -1,5 +1,5 @@
 from N_Tuple import NTupleQAgent
-from GomokuEnv import GomokuEnv
+from NTupleGomokuEnv import NTupleGomokuEnv
 
 import numpy as np
 
@@ -7,14 +7,15 @@ import time
 
 BOARD_SIZE = 15  # ボードのサイズ
 
-game = GomokuEnv(BOARD_SIZE,train_target="both")
+game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
 agent = NTupleQAgent(board_size=game.board_size)
 
-episodes = 1000
+episodes = 1
 
 for episode in range(episodes):
     game.reset()  # ゲームのリセット
-    state = game.get_board()
+    state = game.board.GetBoardInt()
+    oppose_state = game.OpposeBoard()
     done = False
     total_reward = 0
     
@@ -31,7 +32,7 @@ for episode in range(episodes):
         
         t2 = time.time()
         next_state, reward, done, _ = game.step(set_act)
-        next_state = np.array(next_state)  # 次の状態もNumPy配列
+        next_oppose_state = game.OpposeBoard()
         step_time += time.time() - t2
 
         t3 = time.time()

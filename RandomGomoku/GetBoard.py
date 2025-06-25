@@ -15,6 +15,6 @@ def GetBoard(w: int, h: int) -> Board:
     return board
 
 def GetFastBoard(w: int, h: int) -> FastBoard:
-    base = GetBoard(w, h)
-    board: FastBoard = FastBoard(base.GetBoardInt())
+    board: FastBoard = FastBoard()
+    board.MakeBoard(w,h)
     return board
