@@ -21,7 +21,7 @@ for episode in range(episodes):
     total_reward = 0
     
     select_time = 0
-    step_time = 0
+    game_step_time = 0
     update_time = 0
     
     step_num = 0
@@ -36,7 +36,7 @@ for episode in range(episodes):
         t2 = time.time()
         next_state, reward, done, _ = game.step(set_act)
         next_oppose_state = game.OpposeBoard()
-        step_time += time.time() - t2
+        game_step_time += time.time() - t2
 
         t3 = time.time()
         # 相手の行動を環境による変化と考える
@@ -62,7 +62,7 @@ for episode in range(episodes):
         #game.render()
         
     episode_time = time.time() - t0
-    print(f"Select Time: {select_time:.4f}s, Step Time: {step_time:.4f}s, Update Time: {update_time:.4f}s, Episode Time: {episode_time:.4f}s")
+    print(f"Select Time: {select_time:.4f}s, Game Step Time: {game_step_time:.4f}s, Update Time: {update_time:.4f}s, Episode Time: {episode_time:.4f}s")
     print(f"Step: {step_num}step, Step Time: {(episode_time/step_num*1000):.4f}ms")
     
     print(f"Episode: {episode}, Total Reward: {total_reward}")
