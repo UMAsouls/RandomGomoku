@@ -23,6 +23,13 @@ class NTupleBoard:
         
         self.tuples = np.zeros(((board_size**2)*len(self.dirs), n, 2), dtype=np.int32)
         self.lut: np.ndarray = np.zeros((3**n), dtype=np.float64)  # ルックアップテーブルの初期化
+        
+        self.tuples_xy = np.zeros((board_size**2, n*len(self.dirs), n, 2), dtype=np.int32)
+        
+        # shape: (n,)
+        self.powers_of_3 = np.power(3, np.arange(self.n)[::-1])
+        
+        self.xy_idx = np.zeros((self.board_size**2), dtype=np.int32)
 
         self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
         
@@ -30,6 +37,7 @@ class NTupleBoard:
     # 全方向に対してN-tuple（座標のリスト）を定義するメソッド
     def define_tuples(self) -> None:
         idx = 0
+        
         for dir in self.dirs:
             dx, dy = dir
 
@@ -42,7 +50,14 @@ class NTupleBoard:
                 for x in range(x_start, x_goal):
                     # 各方向に対してN-tupleを生成
                     ntuple = make_ntuple(self.n, x, y, dx, dy)
-                    self.tuples[(self.board_size**2)*idx + (y * self.board_size + x)] = ntuple
+                    
+                    pos = y * self.board_size + x
+                    self.tuples[(self.board_size**2)*idx + pos] = ntuple
+                    
+                    for i in range(self.n):
+                        dpos = (y+dy*i) * self.board_size + (x+dx*i)
+                        self.tuples_xy[dpos, self.xy_idx[dpos]] = ntuple
+                        self.xy_idx[dpos] += 1
 
             idx += 1
         
@@ -55,24 +70,38 @@ class NTupleBoard:
         
         return score
     
-    def get_lut_indices(self, board: np.ndarray) -> np.ndarray:
-        # ボードの状態に基づいてルックアップテーブルのインデックスを取得するロジックを実装
+    def evaluate_xy(self, board: np.ndarray, x: int, y: int) -> float:
+        indices = self.get_lut_indices_xy(board, x, y)
+        score = np.sum(self.lut[indices])
         
+        return score
+    
+    def get_lut_indices_by_tuples(self, board: np.ndarray, tuples) -> np.ndarray:
         # shape: (board_size**2, n)
-        x_coords = self.tuples[:, :, 0]
+        x_coords = tuples[:, :, 0]
         # shape: (board_size**2, n)
-        y_coords = self.tuples[:, :, 1]
+        y_coords = tuples[:, :, 1]
         
         # shape: (board_size**2, n)
         values = board[y_coords, x_coords]
         
-        # shape: (n,)
-        powers_of_3 = np.power(3, np.arange(self.n)[::-1])
-        
         # shape: (board_size**2,)
-        indices = np.sum(values * powers_of_3, axis=1)
+        indices = np.sum(values * self.powers_of_3, axis=1)
         
         return indices
+    
+    def get_lut_indices(self, board: np.ndarray) -> np.ndarray:
+        # ボードの状態に基づいてルックアップテーブルのインデックスを取得するロジックを実装
+        
+        return self.get_lut_indices_by_tuples(board, self.tuples)
+    
+    def get_lut_indices_xy(self, board: np.ndarray, x: int, y: int) -> np.ndarray:
+        pos = y * self.board_size + x
+        if(self.xy_idx[pos] < self.n*len(self.dirs)):
+            return self.get_lut_indices_by_tuples(board, self.tuples_xy[pos])
+        else:
+            return self.get_lut_indices_by_tuples(board, self.tuples_xy[pos][0:self.xy_idx[pos]])
+        
 
     def update_lut(self, board: np.ndarray, tderror: float, lr: float, y:float) -> None:
         # ルックアップテーブルの更新ロジックを実装
@@ -107,12 +136,18 @@ class NTupleNetwork:
         self.n_tuples.append(NTupleBoard(n, self.board_size))
         
     def define_tuples(self) -> None:
-        self.add_all_dir_n_tuples(5)
+        self.add_all_dir_n_tuples(10)
         #self.init_weights()  # ルックアップテーブルの初期化
         
     # 盤面の状態から選択可能な手を評価するメソッド
     def evaluate(self, board: np.ndarray) -> np.ndarray:
         scores = np.zeros((self.board_size**2), dtype=np.float64)
+        
+        #元の状態のスコアを保存しておく
+        base_score = 0
+        for ntuple in self.n_tuples:
+            base_score += ntuple.evaluate(board)
+        
         for i in range(self.board_size**2):
             y = i // self.board_size
             x = i % self.board_size
@@ -121,19 +156,22 @@ class NTupleNetwork:
                 scores[i] = -1*INF  # すでに石が置かれている場所はスコアを-∞に設定
                 continue
             
+            # 行動した結果、どのように結果が変化したか差分を取る
+            base_value = 0
+            for ntuple in self.n_tuples:
+               base_value +=  ntuple.evaluate_xy(board, x, y)
+            
             before_value = board[y, x]
             board[y, x] = 1
-            # 空いている場所に対してN-tupleを評価
-            score = 0
+            next_value = 0
             for ntuple in self.n_tuples:
-                score += ntuple.evaluate(board)
+                next_value += ntuple.evaluate_xy(board, x, y)
                 
             board[y, x] = before_value  # 元の状態に戻す
             
-            
             # スコアをtanh関数で正規化
             # ここではスコアを-1から1の範囲に収める
-            scores[i] = np.tanh(score)
+            scores[i] = np.tanh(base_score - base_value + next_value)
             
         return scores
     
