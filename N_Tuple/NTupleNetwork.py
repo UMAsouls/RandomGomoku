@@ -107,7 +107,7 @@ class NTupleNetwork:
         self.n_tuples.append(NTupleBoard(n, self.board_size))
         
     def define_tuples(self) -> None:
-        self.add_all_dir_n_tuples(10)
+        self.add_all_dir_n_tuples(5)
         #self.init_weights()  # ルックアップテーブルの初期化
         
     # 盤面の状態から選択可能な手を評価するメソッド

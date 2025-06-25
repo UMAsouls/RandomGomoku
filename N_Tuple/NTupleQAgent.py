@@ -57,7 +57,7 @@ class NTupleQAgent:
         q = self.ntuple_network.evaluate(state)
         
         tdtarget = reward + (1 - done) * np.max(self.ntuple_network.evaluate(next_state))
-        tderror = -tdtarget - q[action]
+        tderror = tdtarget - q[action]
         
         self.ntuple_network.learn(state, tderror, q[action])
         
