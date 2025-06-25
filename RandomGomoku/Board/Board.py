@@ -12,20 +12,15 @@ import numpy as np
 BLACKINT = 1
 WHITEINT = 2
 
-class FastBoard:
-    def __init__(self, board: list[list[int]]) -> None:
-        self.__board: np.ndarray = np.array(board, dtype=np.int32)
-        self.__board_white: np.ndarray = np.where(self.__board == WHITEINT, 1, 0)
-        self.__board_black: np.ndarray = np.where(self.__board == BLACKINT, 1, 0)
+class BoardWB:
+    def __init__(self, bboard: np.ndarray, wboard: np.ndarray) -> None:
+        self.__board_wb: list[np.ndarray] = [0,0]
+        self.__board_wb[BLACKINT-1] = bboard
+        self.__board_wb[WHITEINT-1] = wboard
         
-        self.__board_wb = (self.__board_black, self.__board_white)
         
-    def GetBoardInt(self) -> np.ndarray:
-        return self.__board
-    
-    def GetStatus(self, x: int, y: int) -> int:
-        return self.__board[y][x]
-    
+    def SetStatus(self, x: int, y: int, player: int, kind: int = 1) -> None:
+        self.__board_wb[player-1][y][x] = kind
         
     def GetStatusFrom(self, x: int, y: int, player: int) -> int:
         if(player != BLACKINT and player != WHITEINT):
@@ -39,13 +34,30 @@ class FastBoard:
             return 2
         else:
             return 0
+
+class FastBoard:
+    def __init__(self, board: list[list[int]]) -> None:
+        self.__board: np.ndarray = np.array(board, dtype=np.int32)
+        self.__board_white: np.ndarray = np.where(self.__board == WHITEINT, 1, 0)
+        self.__board_black: np.ndarray = np.where(self.__board == BLACKINT, 1, 0)
+        
+        self.__board_wb = BoardWB(self.__board_black, self.__board_white)
+        
+    def GetBoardInt(self) -> np.ndarray:
+        return self.__board
+    
+    def GetBoardWB(self) -> BoardWB:
+        return self.__board_wb
+    
+    def GetStatus(self, x: int, y: int) -> int:
+        return self.__board[y][x]
     
     def SetStone(self, x: int, y: int, stone: Stone) -> bool:
         self.__board[y][x] = BLACKINT if stone == Stone.BLACK else WHITEINT
-        self.__board_white[y][x] = 1 if stone == Stone.WHITE else 0
-        self.__board_black[y][x] = 1 if stone == Stone.BLACK else 0
         
         player = BLACKINT if stone == Stone.BLACK else WHITEINT
+        self.__board_wb.SetStatus(x,y,player)
+        
         return self.JudgeWin(x, y, player)
         
     def JudgeWin(self, x: int, y: int, player: int) -> bool:
@@ -82,7 +94,7 @@ class FastBoard:
         px, py = x, y
         count = 0
         while 0 <= px < self.__board.shape[1] and 0 <= py < self.__board.shape[0]:
-            if self.GetStatusFrom(px, py, player) == 1:
+            if self.__board_wb.GetStatusFrom(px, py, player) == 1:
                 count += 1
             else:
                 break
