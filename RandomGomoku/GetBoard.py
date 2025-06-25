@@ -1,4 +1,5 @@
 from RandomGomoku.Board import Board
+from RandomGomoku.Board import FastBoard
 
 from RandomGomoku.Dependency import Dependency
 
@@ -11,4 +12,9 @@ def GetBoard(w: int, h: int) -> Board:
     board: Board = container.resolve(Board)
     board.MakeBoard(w,h)
     
+    return board
+
+def GetFastBoard(w: int, h: int) -> FastBoard:
+    base = GetBoard(w, h)
+    board: FastBoard = FastBoard(base.GetBoardInt())
     return board

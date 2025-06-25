@@ -9,44 +9,102 @@ from RandomGomoku.Board.RandomSetter import RandomSetter
 
 import numpy as np
 
+BLACKINT = 1
+WHITEINT = 2
+
 class FastBoard:
     def __init__(self, board: list[list[int]]) -> None:
         self.__board: np.ndarray = np.array(board, dtype=np.int32)
-        self.__board_white: np.ndarray = np.where(self.__board == Stone.WHITE, 1, 0)
-        self.__board_black: np.ndarray = np.where(self.__board == Stone.BLACK, 1, 0)
+        self.__board_white: np.ndarray = np.where(self.__board == WHITEINT, 1, 0)
+        self.__board_black: np.ndarray = np.where(self.__board == BLACKINT, 1, 0)
         
-    def GetBoard(self) -> list[list[int]]:
+        self.__board_wb = (self.__board_black, self.__board_white)
+        
+    def GetBoardInt(self) -> np.ndarray:
         return self.__board
     
     def GetStatus(self, x: int, y: int) -> int:
         return self.__board[y][x]
     
-    def GetStatusFromWhite(self, x: int, y: int) -> int:
-        if self.__board_white[y][x] == 1:
-            return 1
-        elif self.__board_black[y][x] == 1:
-            return 2
-        else:
-            return 0
-        
-    def GetStatusFromBlack(self, x: int, y: int) -> int:
-        if self.__board_black[y][x] == 1:
-            return 1
-        elif self.__board_white[y][x] == 1:
-            return 2
-        else:
-            return 0
         
     def GetStatusFrom(self, x: int, y: int, player: int) -> int:
-        if player == Stone.WHITE:
-            return self.GetStatusFromWhite(x, y)
-        elif player == Stone.BLACK:
-            return self.GetStatusFromBlack(x, y)
+        if(player != BLACKINT and player != WHITEINT):
+            raise ValueError("Player must be Stone.BLACK or Stone.WHITE")
+        
+        opponent = BLACKINT if player == WHITEINT else WHITEINT
+        
+        if(self.__board_wb[player-1][y][x] == 1):
+            return 1
+        elif(self.__board_wb[opponent-1][y][x] == 1):
+            return 2
         else:
-            raise ValueError("Invalid player type. Use Stone.WHITE or Stone.BLACK.")
+            return 0
     
-    def SetStatus(self, x: int, y: int, status: int) -> None:
-        self.__board[y][x] = status
+    def SetStone(self, x: int, y: int, stone: Stone) -> bool:
+        self.__board[y][x] = BLACKINT if stone == Stone.BLACK else WHITEINT
+        self.__board_white[y][x] = 1 if stone == Stone.WHITE else 0
+        self.__board_black[y][x] = 1 if stone == Stone.BLACK else 0
+        
+        player = BLACKINT if stone == Stone.BLACK else WHITEINT
+        return self.JudgeWin(x, y, player)
+        
+    def JudgeWin(self, x: int, y: int, player: int) -> bool:
+        if(player != WHITEINT and player != BLACKINT):
+            raise ValueError(f"Player must be {WHITEINT} or {BLACKINT}")
+        
+        # Check horizontal
+        horizon_count = self.CountByDir(x, y, 1, 0, player) + self.CountByDir(x, y, -1, 0, player) - 1
+        print(f"horizon: {horizon_count}")
+        if horizon_count >= 5:
+            return True
+        
+        # Check vertical
+        vertical_count = self.CountByDir(x, y, 0, 1, player) + self.CountByDir(x, y, 0, -1, player) - 1
+        print(f"vertical: {vertical_count}")
+        if vertical_count >= 5:
+            return True
+        
+        # Check diagonal /
+        diagonal1_count = self.CountByDir(x, y, 1, -1, player) + self.CountByDir(x, y, -1, 1, player) - 1
+        print(f"diagonal /: {diagonal1_count}")
+        if diagonal1_count >= 5:
+            return True
+        
+        # Check diagonal \
+        diagonal2_count = self.CountByDir(x, y, 1, 1, player) + self.CountByDir(x, y, -1, -1, player) - 1
+        print(f"diagonal \\ : {diagonal2_count}")
+        if diagonal2_count >= 5:
+            return True
+        
+        return False
+        
+    def CountByDir(self, x: int, y: int, dx: int, dy: int, player: int) -> int:
+        px, py = x, y
+        count = 0
+        while 0 <= px < self.__board.shape[1] and 0 <= py < self.__board.shape[0]:
+            if self.GetStatusFrom(px, py, player) == 1:
+                count += 1
+            else:
+                break
+            px += dx
+            py += dy
+            
+        return count
+    
+    def PrintBoard(self) -> None:
+        count1: int = 0
+        count2: int = 0
+        sboard: str = ""
+        chg_map: dict[int, str] = {0:"🔳", 1:"🔴", 2:"🔵"}
+        for i in self.__board:
+            for j in i:
+                sboard += f"{chg_map[j]}"
+                if(j == 1): count1 += 1
+                elif(j == 2): count2 += 1
+            sboard += "\n"
+            
+        print(sboard)
+        print(f"Black: {count1} White: {count2}")
 
 class Board():
     
@@ -54,7 +112,6 @@ class Board():
     def __init__(self, headmass: IHeadMass) -> None:
         self.__headmass: IHeadMass = headmass
         self.__board: list[list[IMass]] = []
-        self.__board_int: FastBoard = FastBoard([])
         
         self.__width: int = -1
         self.__height: int = -1
@@ -108,8 +165,6 @@ class Board():
         self.__height = h
         
         self.RandomSet()
-
-        self.__board_int = FastBoard(self.GetBoardInt())
         
         
     def GetBoardInt(self) -> list[list[int]]:
@@ -119,9 +174,6 @@ class Board():
             ]
             for j in self.__board
         ]
-    
-    def GetFastBoard(self) -> FastBoard:
-        return self.__board_int
         
         
     def PrintBoard(self) -> None:

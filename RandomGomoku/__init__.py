@@ -1,3 +1,3 @@
-from RandomGomoku.GetBoard import GetBoard
+from RandomGomoku.GetBoard import GetBoard, GetFastBoard
 
-from RandomGomoku.Board import Board
+from RandomGomoku.Board import Board, FastBoard
