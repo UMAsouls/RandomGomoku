@@ -8,6 +8,7 @@ BATCH_SIZE = 32
 BUFFER_SIZE = 10000
 LEARNING_RATE = 0.01
 EPSILON = 0.01  # ε-greedy法のε値
+GAMMA = 0.9
 
 
 class NTupleQAgent:
@@ -15,6 +16,7 @@ class NTupleQAgent:
         self.batch_size = BATCH_SIZE
         self.buffer_size = BUFFER_SIZE
         self.learning_rate = LEARNING_RATE
+        self.gamma = GAMMA
         self.epsilon = EPSILON
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.ntuple_network = NTupleNetwork(board_size=board_size, learning_rate=self.learning_rate)
@@ -56,7 +58,7 @@ class NTupleQAgent:
         """
         q = self.ntuple_network.evaluate(state)
         
-        tdtarget = reward + (1 - done) * np.max(self.ntuple_network.evaluate(next_state))
+        tdtarget = reward + (1 - done) * self.gamma * np.max(self.ntuple_network.evaluate(next_state))
         tderror = tdtarget - q[action]
         
         self.ntuple_network.learn(state, tderror, q[action])
