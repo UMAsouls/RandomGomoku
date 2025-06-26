@@ -66,6 +66,8 @@ for episode in range(episodes):
     episode_time = time.time() - t0
     print(f"Select Time: {select_time:.4f}s, Game Step Time: {game_step_time:.4f}s, Update Time: {update_time:.4f}s, Episode Time: {episode_time:.4f}s")
     print(f"Step: {step_num}step, Step Time: {(episode_time/step_num*1000):.4f}ms")
+    agent.print_ev_times()
+    agent.print_net_ev_times()
     
     print(f"Episode: {episode}, Total Reward: {total_reward}")
 
