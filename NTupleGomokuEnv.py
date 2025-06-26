@@ -21,3 +21,12 @@ class NTupleGomokuEnv(GomokuEnv):
             return self.board.GetBoardInt()
         else:
             return self.board.GetBoardOppose()
+    
+    # 盤面をキャリッジリターンで出力し、カーソルを改行分だけ上げる  
+    def Animation(self):
+        print("\r{0}{1}".format(self.board.StringBoard(), f"\033[{self.board_size+1}A"), end = "", flush=True)
+    
+    # アニメーション終了処理
+    # カーソルをアニメーションエリアの分だけ下げる   
+    def AnimationEnd(self):
+        print(f"\033[{self.board_size+1}B")

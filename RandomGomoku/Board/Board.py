@@ -146,7 +146,7 @@ class FastBoard:
             
         return count
     
-    def PrintBoard(self) -> None:
+    def StringBoard(self) -> str:
         count1: int = 0
         count2: int = 0
         sboard: str = ""
@@ -157,9 +157,12 @@ class FastBoard:
                 if(j == 1): count1 += 1
                 elif(j == 2): count2 += 1
             sboard += "\n"
-            
-        print(sboard)
-        print(f"Black: {count1} White: {count2}")
+        sboard += f"\nBlack: {count1} White: {count2}"
+        
+        return sboard
+    
+    def PrintBoard(self) -> None:
+        print(self.StringBoard())
 
 class Board():
     
