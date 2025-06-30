@@ -12,14 +12,16 @@ GAMMA = 0.9
 
 
 class NTupleQAgent:
-    def __init__(self, board_size=19):
+    def __init__(self, board_size=19, model_path = "NTupleQModel", eps = EPSILON):
         self.batch_size = BATCH_SIZE
         self.buffer_size = BUFFER_SIZE
         self.learning_rate = LEARNING_RATE
         self.gamma = GAMMA
-        self.epsilon = EPSILON
+        self.epsilon = eps
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.ntuple_network = NTupleNetwork(board_size=board_size, learning_rate=self.learning_rate)
+
+        self.model_path = model_path
         
     def random_empty_action(self, board: np.ndarray) -> int:
         # ランダムに手を選ぶ
@@ -65,4 +67,11 @@ class NTupleQAgent:
         
         
         # N-tupleネットワークの学習
+
+    def save(self):
+        self.ntuple_network.save(self.model_path)
+
+    def load(self):
+        self.ntuple_network.load(self.model_path)
+        
             

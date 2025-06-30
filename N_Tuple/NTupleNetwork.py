@@ -1,6 +1,8 @@
 import numpy as np
 import collections
 
+import os
+
 from N_Tuple.ReplayBuffer import Experience
 
 INF = 100
@@ -114,14 +116,24 @@ class NTupleBoard:
 
     def get_lut(self):
         return self.lut
+    
+    def save(self, path: str) -> None:
+        np.save(path, self.lut)
+
+    
+    def load(self, path: str) -> None:
+        self.lut = np.load(path)
+
 
 
 
 # 五目並べのN-tupleネットワークの実装
 class NTupleNetwork:
-    def __init__(self, board_size: int, learning_rate: float = 0.01) -> None:
+    def __init__(self, board_size: int, ts: list[int] = [10], learning_rate: float = 0.01) -> None:
         self.board_size = board_size
         self.learning_rate = learning_rate
+
+        self.ts = ts
         
         self.n_tuples: list[NTupleBoard] = []
         self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
@@ -136,7 +148,8 @@ class NTupleNetwork:
         self.n_tuples.append(NTupleBoard(n, self.board_size))
         
     def define_tuples(self) -> None:
-        self.add_all_dir_n_tuples(10)
+        for i in self.ts:
+            self.add_all_dir_n_tuples(i)
         #self.init_weights()  # ルックアップテーブルの初期化
         
     # 盤面の状態から選択可能な手を評価するメソッド
@@ -179,5 +192,34 @@ class NTupleNetwork:
     def learn(self, board:np.ndarray, tderror: float, y:float) -> None:
         for ntuple in self.n_tuples:
             ntuple.update_lut(board, tderror, self.learning_rate, y)
+
+    def load(self, dir_path:str) -> None:
+        self.ts: list[int] = []
+        model_kind_path = dir_path + "/kind.csv"
+        with open(model_kind_path, mode = "r", encoding="utf-8") as f:
+            line = f.read()
+            data = line.strip("\n").split(",")
+            for i in data:
+                self.ts.append(int(i))
+
+        self.define_tuples()
+
+        for i in self.n_tuples:
+            i.load(dir_path + "/model" + str(i.n) + ".npy")
+
+    def save(self, dir_path:str) -> None:
+        os.makedirs(dir_path, exist_ok=True)
+
+        model_kind_path = dir_path + "/kind.csv"
+        with open(model_kind_path, mode = "w", encoding="utf-8") as f:
+            data = ""
+            for i in self.ts:
+                data += str(i) + ","
+
+            f.write(data[:-1])
+
+        for i in self.n_tuples:
+            i.save(dir_path + "/model" + str(i.n) + ".npy")
+
             
             

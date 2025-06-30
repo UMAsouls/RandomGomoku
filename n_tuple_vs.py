@@ -1,5 +1,6 @@
 from N_Tuple import NTupleQAgent
 from GomokuEnv import GomokuEnv
+from NTupleGomokuEnv import NTupleGomokuEnv
 
 from agent import RuleBasedAgent
 from agent import RandomAgent
@@ -7,45 +8,64 @@ from agent import MinimaxAgent
 
 import numpy as np
 
+import time
+
 BOARD_SIZE = 15  # ボードのサイズ
 
-game = GomokuEnv(BOARD_SIZE,train_target="first")  # 先手で学習
-agent = NTupleQAgent(board_size=game.board_size)
+game = NTupleGomokuEnv(BOARD_SIZE,train_target="first")  # 先手で学習
+agent = NTupleQAgent(board_size=game.board_size, eps=0)
 
-rule_based_agent = RuleBasedAgent()
+agent.load()
+
+rule_based_agent = RuleBasedAgent(BOARD_SIZE)
 minimax_agent = MinimaxAgent()
-random_agent = RandomAgent()
+random_agent = RandomAgent(BOARD_SIZE)
 
-episodes = 100
-
-train_agent = agent  # 学習エージェント
 opponent_agent = rule_based_agent  # 対戦相手エージェント
 
-for episode in range(episodes):
-    game.reset()  # ゲームのリセット
-    state = game.get_board()
-    done = False
-    total_reward = 0
+game.reset()  # ゲームのリセット
+state = game.board.GetBoardInt()
+bef_state = np.nan
+bef_action = None
+done = False
+total_reward = 0
 
-    while not done:
-        if(game.current_player == game.train_player):
-            # 学習エージェントのターン
-            action = train_agent.select_action(state)
-            action = (action % game.board_size, action // game.board_size)
-        else:
-            # 対戦相手エージェントのターン
-            action = opponent_agent.get_action(state, game.current_player)
-            
-        #print(set_act)
-        next_state, reward, done, _ = game.step(action)
-        
-        next_state = np.array(next_state)  # 次の状態もNumPy配列
+select_time = 0
+game_step_time = 0
+update_time = 0
 
-        if(game.current_player == game.train_player):
-            # 学習エージェントのターンならば更新
-            agent.update(state, action[1]*game.board_size + action[0], reward, next_state, done)
-        state = next_state
-        total_reward += reward
-        #game.render()
+step_num = 0
 
-    print(f"Episode: {episode}, Total Reward: {total_reward}")
+t0 = time.time()
+while not done:
+    action = agent.select_action(state)
+    set_act = (action % game.board_size, action // game.board_size) #x, yのタプルに変換
+    
+    next_state, reward, done, _ = game.step(set_act)
+    state = next_state
+    
+    total_reward += reward
+    step_num += 1
+    game.Animation()
+
+    if done:
+        break
+
+    action = opponent_agent.get_action(state, game.current_player)
+
+    next_state, reward, done, _ = game.step(action)
+    state = next_state
+
+    total_reward += reward
+    step_num += 1
+    game.Animation()
+    time.sleep(0.5)
+
+game.AnimationEnd()
+game.render()
+
+
+
+    
+    
+    

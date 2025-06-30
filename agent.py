@@ -2,28 +2,28 @@
 import random
 import time
 class RandomAgent:
-    def __init__(self):
-        pass
+    def __init__(self, board_size):
+        self.board_size = board_size
     
     #state=盤面の状態
     #empty_positions=空いてるマスのリスト作成
     def get_action(self, state,player_stone):
-        empty_positions = [(j, i) for i in range(19) for j in range(19) if state[i][j] == 0]
+        empty_positions = [(j, i) for i in range(self.board_size) for j in range(self.board_size) if state[i][j] == 0]
         return random.choice(empty_positions)
     
 class RuleBasedAgent:
-    def __init__(self):
-        pass
+    def __init__(self, board_size: int = 19):
+        self.board_size = board_size
     
     def get_action(self, state, player_stone):
-        already_placed = [(j, i) for i in range(19) for j in range(19) if state[i][j] != 0]
+        already_placed = [(j, i) for i in range(self.board_size) for j in range(self.board_size) if state[i][j] != 0]
         positions = []
         for i, j in already_placed:
             for i_offset in range(-1, 2):
                 for j_offset in range(-1, 2):
                     if i_offset == 0 and j_offset == 0:
                         continue
-                    if 0 <= i + i_offset < 19 and 0 <= j + j_offset < 19 and state[i + i_offset][j + j_offset] == 0:
+                    if 0 <= i + i_offset < self.board_size and 0 <= j + j_offset < self.board_size and state[i + i_offset][j + j_offset] == 0:
                         positions.append((j + j_offset,i + i_offset ))
     
         random.shuffle(positions)  # 探索順序をランダム化
@@ -78,23 +78,23 @@ class RuleBasedAgent:
     def check_consecutive(self, state, player_stone, count):
         """縦・横・斜めに指定された個数が連続しているかを確認"""
         # 縦方向
-        for i in range(19 - count + 1):
-            for j in range(19):
+        for i in range(self.board_size - count + 1):
+            for j in range(self.board_size):
                 if all(state[i + k][j] == player_stone for k in range(count)):
                     return True
         # 横方向
-        for i in range(19):
-            for j in range(19 - count + 1):
+        for i in range(self.board_size):
+            for j in range(self.board_size - count + 1):
                 if all(state[i][j + k] == player_stone for k in range(count)):
                     return True
         # 斜め（左上→右下）
-        for i in range(19 - count + 1):
-            for j in range(19 - count + 1):
+        for i in range(self.board_size - count + 1):
+            for j in range(self.board_size - count + 1):
                 if all(state[i + k][j + k] == player_stone for k in range(count)):
                     return True
         # 斜め（右上→左下）
-        for i in range(19 - count + 1):
-            for j in range(count - 1, 19):
+        for i in range(self.board_size - count + 1):
+            for j in range(count - 1, self.board_size):
                 if all(state[i + k][j - k] == player_stone for k in range(count)):
                     return True
         return False
@@ -113,26 +113,26 @@ class RuleBasedAgent:
         return win
     
     def check_win_vertical(self, state, player_stone):
-        for i in range(15):
-            for j in range(19):
+        for i in range(self.board_size - 4):
+            for j in range(self.board_size):
                 if all(state[i + k][j] == player_stone for k in range(5)):
                     return True
         return False
     
     def check_win_horizontal(self, state, player_stone):
-        for i in range(19):
-            for j in range(15):
+        for i in range(self.board_size):
+            for j in range(self.board_size - 4):
                 if all(state[i][j + k] == player_stone for k in range(5)):
                     return True
         return False
     
     def check_win_diagonal(self, state, player_stone):
-        for i in range(15):
-            for j in range(15):
+        for i in range(self.board_size - 4):
+            for j in range(self.board_size - 4):
                 if all(state[i + k][j + k] == player_stone for k in range(5)):
                     return True
-        for i in range(15):
-            for j in range(4, 19):
+        for i in range(self.board_size - 4):
+            for j in range(4, self.board_size):
                 if all(state[i + k][j - k] == player_stone for k in range(5)):
                     return True
         return False

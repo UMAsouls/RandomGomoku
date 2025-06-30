@@ -10,7 +10,7 @@ BOARD_SIZE = 15  # ボードのサイズ
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
 agent = NTupleQAgent(board_size=game.board_size)
 
-episodes = 2000
+episodes = 5000
 
 for episode in range(episodes):
     game.reset()  # ゲームのリセット
@@ -68,4 +68,6 @@ for episode in range(episodes):
     print(f"Step: {step_num}step, Step Time: {(episode_time/step_num*1000):.4f}ms")
     
     print(f"Episode: {episode}, Total Reward: {total_reward}")
+
+agent.save()
 
