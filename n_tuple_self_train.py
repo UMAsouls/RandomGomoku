@@ -8,7 +8,7 @@ import time
 BOARD_SIZE = 15  # ボードのサイズ
 
 MODEL_DIR = "NTupleQModel"
-MODEL_NAME = "NTupleQModel_mini"
+MODEL_NAME = "Model7_01_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 NETS = [10]
@@ -42,20 +42,12 @@ for episode in range(episodes):
         
         t2 = time.time()
         next_state, reward, done, _ = game.step(set_act)
-        next_oppose_state = game.OpposeBoard()
         game_step_time += time.time() - t2
 
         t3 = time.time()
-        # 相手の行動を環境による変化と考える
-        # するとtdtargetは相手の行動結果を対象に作らなければならない
-        # doneのときは(bef_actionをした側を自分として)相手が勝ったから、この手を打ったら負けると学習できる
-        if(bef_state is not np.nan or bef_action is not None):
-            agent.update(bef_state, bef_action, -reward, next_state, done)
+
+        agent.update(state, action, reward, next_state, done)
         
-        # 試合終了した際はnext_stateが意味を無くすので、reward単体をtdtargetとすることができる
-        # この手を打ったら勝てると学習できる
-        if(done):
-            agent.update(state, action, reward, next_state, done)
         update_time += time.time() - t3
         
         

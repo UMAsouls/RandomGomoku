@@ -87,10 +87,10 @@ class FastBoard:
         
         
     def GetBoardInt(self) -> np.ndarray:
-        return self.__board
+        return self.__board.copy()
     
     def GetBoardOppose(self) -> np.ndarray:
-        return self.__board_oppose
+        return self.__board_oppose.copy()
     
     def GetStatus(self, x: int, y: int) -> int:
         return self.__board[y][x]

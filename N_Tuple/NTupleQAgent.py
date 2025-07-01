@@ -21,6 +21,8 @@ class NTupleQAgent:
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.ntuple_network = NTupleNetwork(board_size=board_size, ts = net_list, learning_rate=self.learning_rate)
 
+        self.board_size = board_size
+
         self.model_path = model_path
         
     def random_empty_action(self, board: np.ndarray) -> int:
@@ -60,10 +62,15 @@ class NTupleQAgent:
         """
         q = self.ntuple_network.evaluate(state)
         
-        tdtarget = reward + (1 - done) * self.gamma * np.max(self.ntuple_network.evaluate(next_state))
+        # next_stateは相手から見た盤面 → マイナスする
+        tdtarget = reward - (1 - done) * self.gamma * np.max(self.ntuple_network.evaluate(next_state))
         tderror = tdtarget - q[action]
+
+        update_state = state.copy()
+        update_state[action//self.board_size, action % self.board_size] = 1
         
-        self.ntuple_network.learn(state, tderror, q[action])
+        self.ntuple_network.learn(update_state, tderror, q[action])
+
         
         
         # N-tupleネットワークの学習

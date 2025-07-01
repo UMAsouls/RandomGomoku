@@ -12,7 +12,7 @@ import time
 
 BOARD_SIZE = 15  # ボードのサイズ
 MODEL_DIR = "NTupleQModel"
-MODEL_NAME = ""
+MODEL_NAME = "Model7_01_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="first")  # 先手で学習
