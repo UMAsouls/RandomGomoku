@@ -60,16 +60,13 @@ class NTupleQAgent:
         
         batch = self.replay_buffer.get_batch()
         """
-        q = self.ntuple_network.evaluate(state)
+        qs = self.ntuple_network.evaluate(state)
         
         # next_stateは相手から見た盤面 → マイナスする
         tdtarget = reward - (1 - done) * self.gamma * np.max(self.ntuple_network.evaluate(next_state))
-        tderror = tdtarget - q[action]
-
-        update_state = state.copy()
-        update_state[action//self.board_size, action % self.board_size] = 1
+        tderror = tdtarget - qs[action]
         
-        self.ntuple_network.learn(update_state, tderror, q[action])
+        self.ntuple_network.learn(state, action, tderror, qs[action])
 
         
         

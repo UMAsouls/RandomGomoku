@@ -190,9 +190,14 @@ class NTupleNetwork:
         return scores
     
     
-    def learn(self, board:np.ndarray, tderror: float, y:float) -> None:
+    def learn(self, board:np.ndarray, action: int, tderror: float, y:float) -> None:
+        # q(s,a)はアクションを起こした後の盤面を評価したもの
+        # 更新するのはアクション後の盤面でなければならない
+        update_state = board.copy()
+        update_state[action//self.board_size, action%self.board_size] = 1
+
         for ntuple in self.n_tuples:
-            ntuple.update_lut(board, tderror, self.learning_rate, y)
+            ntuple.update_lut(update_state, tderror, self.learning_rate, y)
 
     def load(self, dir_path:str) -> None:
         self.ts: list[int] = []
