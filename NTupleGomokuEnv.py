@@ -10,14 +10,22 @@ class NTupleGomokuEnv(GomokuEnv):
 
     def step(self, action):
         a1, reward, done, a2 = super().step(action)
+
+        if done == 1:
+            if self.current_player == 1 or self.train_player == 0:
+                reward = 1
+            else:
+                reward = -1
+        else:
+            reward = 0
         
-        if self.current_player != 1 and self.train_player == 0:
+        if self.current_player == 2 and self.train_player == 0:
             return self.board.GetBoardOppose(), reward, done, a2
         else:
             return self.board.GetBoardInt(), reward, done, a2
     
     def OpposeBoard(self):
-        if self.current_player != 1 and self.train_player == 0:
+        if self.current_player == 2 and self.train_player == 0:
             return self.board.GetBoardInt()
         else:
             return self.board.GetBoardOppose()
