@@ -7,14 +7,17 @@ import time
 
 BOARD_SIZE = 15  # ボードのサイズ
 
-MODEL_PATH = "NTupleQModel_mini"
+MODEL_DIR = "NTupleQModel"
+MODEL_NAME = "NTupleQModel_mini"
+MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
-NETS = [5]
+NETS = [10]
 
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
 agent = NTupleQAgent(board_size=game.board_size, model_path=MODEL_PATH, net_list=NETS)
 
-episodes = 1000
+episodes = 100000
+save_rate = 5000
 
 for episode in range(episodes):
     game.reset()  # ゲームのリセット
@@ -73,6 +76,6 @@ for episode in range(episodes):
     
     print(f"Episode: {episode}, Total Reward: {total_reward}")
 
-    if (episode % 5000 == 0):
+    if (episode % save_rate == 0):
         agent.save()
 
