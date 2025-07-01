@@ -11,17 +11,20 @@ import numpy as np
 import time
 
 BOARD_SIZE = 15  # ボードのサイズ
+MODEL_DIR = "NTupleQModel"
+MODEL_NAME = ""
+MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="first")  # 先手で学習
-agent = NTupleQAgent(board_size=game.board_size, eps=0)
+agent = NTupleQAgent(board_size=game.board_size,model_path=MODEL_PATH, eps=0)
 
 agent.load()
 
 rule_based_agent = RuleBasedAgent(BOARD_SIZE)
-minimax_agent = MinimaxAgent()
+minimax_agent = MinimaxAgent(board_size=BOARD_SIZE)
 random_agent = RandomAgent(BOARD_SIZE)
 
-opponent_agent = rule_based_agent   # 対戦相手エージェント
+opponent_agent = minimax_agent   # 対戦相手エージェント
 
 
 

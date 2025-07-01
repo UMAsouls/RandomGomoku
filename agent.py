@@ -139,8 +139,9 @@ class RuleBasedAgent:
 
 
 class MinimaxAgent:
-    def __init__(self, depth=2):
+    def __init__(self, depth=2, board_size = 19):
         self.depth = depth  # 最大探索深さ
+        self.board_size = board_size
     
     def get_action(self, state, player_stone):
         best_score = float('-inf')
@@ -181,8 +182,7 @@ class MinimaxAgent:
                 best_score = score
                 best_action = (j, i)
 
-        print("best_score:", best_score)
-        return best_action if best_action else random.choice([(i, j) for i in range(19) for j in range(19) if state[i][j] == 0])
+        return best_action if best_action else random.choice([(i, j) for i in range(self.board_size) for j in range(self.board_size) if state[i][j] == 0])
 
 
     def minimax(self, state, depth, is_maximizing, alpha, beta, player_stone, last_move):
@@ -221,7 +221,7 @@ class MinimaxAgent:
         score = 0
         x, y = last_move
         
-        already_placed = [(j, i) for i in range(19) for j in range(19) if state[i][j] != 0]
+        already_placed = [(j, i) for i in range(self.board_size) for j in range(self.board_size) if state[i][j] != 0]
         for i,j in  already_placed:
             score += self.count_consecutive(state, player_stone, 2, i, j) * 1
             score += self.count_consecutive(state, player_stone, 3, i, j) * 25
@@ -248,7 +248,7 @@ class MinimaxAgent:
             # 正方向に探索
             for d in range(1, count):
                 nx, ny = x + d * dx, y + d * dy
-                if 0 <= nx < 19 and 0 <= ny < 19:
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
                     if state[nx][ny] == player_stone:
                         consecutive += 1
                     elif state[nx][ny] != 0:  # 相手の駒でブロックされたら終了
@@ -262,7 +262,7 @@ class MinimaxAgent:
             # 逆方向に探索
             for d in range(1, count):
                 nx, ny = x - d * dx, y - d * dy
-                if 0 <= nx < 19 and 0 <= ny < 19:
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
                     if state[nx][ny] == player_stone:
                         consecutive += 1
                     elif state[nx][ny] != 0:  # 相手の駒でブロック
@@ -286,15 +286,15 @@ class MinimaxAgent:
 
     def get_candidate_positions(self, state):
         positions = []
-        visited = [[False] * 19 for _ in range(19)]
+        visited = [[False] * self.board_size for _ in range(self.board_size)]
 
-        for i in range(19):
-            for j in range(19):
+        for i in range(self.board_size):
+            for j in range(self.board_size):
                 if state[i][j] != 0:  # 石が置かれている位置の周囲だけ探索
                     for dx in range(-1, 2):
                         for dy in range(-1, 2):
                             ni, nj = i + dx, j + dy
-                            if 0 <= ni < 19 and 0 <= nj < 19 and state[ni][nj] == 0 and not visited[ni][nj]:
+                            if 0 <= ni < self.board_size and 0 <= nj < self.board_size and state[ni][nj] == 0 and not visited[ni][nj]:
                                 visited[ni][nj] = True
                                 positions.append((ni, nj))
         random.shuffle(positions)
