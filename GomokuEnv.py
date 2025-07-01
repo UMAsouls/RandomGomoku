@@ -62,7 +62,7 @@ class GomokuEnv:
         # ゲームが終了した場合
         if done:
             self.board.PrintBoard()
-            if self.current_player == self.train_player or self.train_player == 0:
+            if self.current_player == self.train_player:
                 reward += 1  # 黒が勝った
             else:
                 reward += -1  # 白が勝った
@@ -73,22 +73,6 @@ class GomokuEnv:
         self.current_player = 3 - self.current_player
         
         return self.board.GetBoardInt(), reward, done, {}
-
-
-    def get_board(self):
-        if self.current_player != 1 and self.train_player == 0:
-            # 白の視点でボードを返す
-            inverted_board = np.zeros_like(self.board.GetBoardInt())
-            for y in range(self.board_size):
-                for x in range(self.board_size):
-                    if self.board.GetBoardInt()[y][x] == 1:
-                        inverted_board[y][x] = 2
-                    elif self.board.GetBoardInt()[y][x] == 2:
-                        inverted_board[y][x] = 1
-            return inverted_board
-        else:
-            # 黒の視点でボードを返す
-            return np.array(self.board.GetBoardInt())
 
     def get_human_action(self):
         while True:

@@ -7,10 +7,14 @@ import time
 
 BOARD_SIZE = 15  # ボードのサイズ
 
-game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
-agent = NTupleQAgent(board_size=game.board_size)
+MODEL_PATH = "NTupleQModel_mini"
 
-episodes = 100000
+NETS = [5]
+
+game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
+agent = NTupleQAgent(board_size=game.board_size, model_path=MODEL_PATH, net_list=NETS)
+
+episodes = 1000
 
 for episode in range(episodes):
     game.reset()  # ゲームのリセット

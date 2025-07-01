@@ -103,7 +103,7 @@ class FastBoard:
         
         return self.JudgeWin(x, y, player)
         
-    def JudgeWin(self, x: int, y: int, player: int) -> bool:
+    def JudgeWin(self, x: int, y: int, player: int) -> int:
         if(player != WHITEINT and player != BLACKINT):
             raise ValueError(f"Player must be {WHITEINT} or {BLACKINT}")
         
@@ -111,27 +111,30 @@ class FastBoard:
         horizon_count = self.CountByDir(x, y, 1, 0, player) + self.CountByDir(x, y, -1, 0, player) - 1
         #print(f"horizon: {horizon_count}")
         if horizon_count >= 5:
-            return True
+            return 1
         
         # Check vertical
         vertical_count = self.CountByDir(x, y, 0, 1, player) + self.CountByDir(x, y, 0, -1, player) - 1
         #print(f"vertical: {vertical_count}")
         if vertical_count >= 5:
-            return True
+            return 1
         
         # Check diagonal /
         diagonal1_count = self.CountByDir(x, y, 1, -1, player) + self.CountByDir(x, y, -1, 1, player) - 1
         #print(f"diagonal /: {diagonal1_count}")
         if diagonal1_count >= 5:
-            return True
+            return 1
         
         # Check diagonal \
         diagonal2_count = self.CountByDir(x, y, 1, 1, player) + self.CountByDir(x, y, -1, -1, player) - 1
         #print(f"diagonal \\ : {diagonal2_count}")
         if diagonal2_count >= 5:
-            return True
+            return 1
         
-        return False
+        if(len(np.where(self.__board == 0)[0]) == 0):
+            return 2
+        
+        return 0
         
     def CountByDir(self, x: int, y: int, dx: int, dy: int, player: int) -> int:
         px, py = x, y

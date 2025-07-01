@@ -109,7 +109,8 @@ class NTupleBoard:
         # ルックアップテーブルの更新ロジックを実装
         indices = self.get_lut_indices(board)
         #yはモデルの出力値（tanh関数を通したスコア）
-        self.lut[indices] += lr * tderror * (1- y**2)    
+        #テーブルではなく関数近似だから、更新式が少し違う
+        self.lut[indices] -= lr * tderror * (1- y**2)    
 
     def get_tuples(self):
         return self.tuples

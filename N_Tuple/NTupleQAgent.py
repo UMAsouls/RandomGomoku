@@ -12,14 +12,14 @@ GAMMA = 0.9
 
 
 class NTupleQAgent:
-    def __init__(self, board_size=19, model_path = "NTupleQModel", eps = EPSILON):
+    def __init__(self, board_size=19, model_path = "NTupleQModel", eps = EPSILON, net_list = [10]):
         self.batch_size = BATCH_SIZE
         self.buffer_size = BUFFER_SIZE
         self.learning_rate = LEARNING_RATE
         self.gamma = GAMMA
         self.epsilon = eps
         self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
-        self.ntuple_network = NTupleNetwork(board_size=board_size, learning_rate=self.learning_rate)
+        self.ntuple_network = NTupleNetwork(board_size=board_size, ts = net_list, learning_rate=self.learning_rate)
 
         self.model_path = model_path
         
