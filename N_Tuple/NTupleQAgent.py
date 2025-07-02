@@ -51,7 +51,7 @@ class NTupleQAgent:
             action = np.random.choice(indices)
             return action
         
-    def update(self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool):
+    def update(self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool) -> float:
         """
         self.replay_buffer.add(state, action, reward, next_state, done)
         
@@ -67,6 +67,8 @@ class NTupleQAgent:
         tderror = tdtarget - qs[action]
         
         self.ntuple_network.learn(state, action, tderror, qs[action])
+
+        return tderror**2
 
         
         

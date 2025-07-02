@@ -45,8 +45,8 @@ class NTupleBoard:
 
             y_start = 0 if dy >= 0 else self.n - 1
             x_start = 0 if dx >= 0 else self.n - 1
-            y_goal = self.board_size if dy <= 0 else self.board_size - self.n
-            x_goal = self.board_size if dx <= 0 else self.board_size - self.n
+            y_goal = self.board_size if dy <= 0 else self.board_size - (self.n - 1)
+            x_goal = self.board_size if dx <= 0 else self.board_size - (self.n - 1)
 
             for y in range(y_start, y_goal):
                 for x in range(x_start, x_goal):
@@ -110,7 +110,7 @@ class NTupleBoard:
         indices = self.get_lut_indices(board)
         #yはモデルの出力値（tanh関数を通したスコア）
         #テーブルではなく関数近似だから、更新式が少し違う
-        self.lut[indices] -= lr * tderror * (1- y**2)    
+        self.lut[indices] += lr * tderror * (1- y**2)    
 
     def get_tuples(self):
         return self.tuples

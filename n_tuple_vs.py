@@ -12,7 +12,7 @@ import time
 
 BOARD_SIZE = 15  # ボードのサイズ
 MODEL_DIR = "NTupleQModel"
-MODEL_NAME = "Model7_01_1"
+MODEL_NAME = "Model7_02_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="first")  # 先手で学習
@@ -24,13 +24,13 @@ rule_based_agent = RuleBasedAgent(BOARD_SIZE)
 minimax_agent = MinimaxAgent(board_size=BOARD_SIZE)
 random_agent = RandomAgent(BOARD_SIZE)
 
-opponent_agent = minimax_agent   # 対戦相手エージェント
+opponent_agent = random_agent   # 対戦相手エージェント
 
 
 
 t0 = time.time()
 
-vs = 10
+vs = 100
 win_n = 0
 win_o = 0
 for i in range(vs):

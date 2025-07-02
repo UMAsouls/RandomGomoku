@@ -8,7 +8,7 @@ import time
 BOARD_SIZE = 15  # ボードのサイズ
 
 MODEL_DIR = "NTupleQModel"
-MODEL_NAME = "Model7_01_2"
+MODEL_NAME = "Model7_02_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 NETS = [10]
@@ -46,7 +46,7 @@ for episode in range(episodes):
 
         t3 = time.time()
 
-        agent.update(state, action, reward, next_state, done)
+        loss = agent.update(state, action, reward, next_state, done)
         
         update_time += time.time() - t3
         
