@@ -34,33 +34,8 @@ DEFAULT_LEARNING_RATE = 0.001  # 初期学習率（少し増加）
 # デバイスの設定
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def value_to_class_label(value):
-    """
-    ゲーム結果の値(-1, 0, 1)を3クラスのラベル(0, 1, 2)に変換
-    -1 (敗北) -> 0
-    0 (引き分け) -> 1  
-    1 (勝利) -> 2
-    """
-    if value < -0.5:
-        return 0  # 敗北
-    elif value > 0.5:
-        return 2  # 勝利
-    else:
-        return 1  # 引き分け
-
-def class_label_to_value(label):
-    """
-    3クラスのラベル(0, 1, 2)をゲーム結果の値(-1, 0, 1)に変換
-    0 -> -1 (敗北)
-    1 -> 0 (引き分け)
-    2 -> 1 (勝利)
-    """
-    if label == 0:
-        return -1.0
-    elif label == 2:
-        return 1.0
-    else:
-        return 0.0
+# デバイスの設定
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DualNetwork(nn.Module):
     """方策と価値を出力するニューラルネットワーク"""
@@ -87,14 +62,12 @@ class DualNetwork(nn.Module):
         # 方策ヘッド (Kerasモデルに合わせて4フィルタの畳み込み層を使用)
         self.policy_conv = nn.Conv2d(128, 4, 1, stride=1)
         self.policy_bn = nn.BatchNorm2d(4)
-        self.policy_fc = nn.Linear(4 * board_size * board_size, board_size * board_size)
-        
-        # 価値ヘッド (3クラス分類用：敗北、引き分け、勝利)
+        self.policy_fc = nn.Linear(4 * board_size * board_size, board_size * board_size)        # 価値ヘッド (勝率回帰用：0から1の範囲)
         self.value_conv = nn.Conv2d(128, 2, 1, stride=1)
         self.value_bn = nn.BatchNorm2d(2)
         self.value_fc1 = nn.Linear(2 * board_size * board_size, 64)
         self.value_dropout = nn.Dropout(0.3)
-        self.value_fc2 = nn.Linear(64, 3)  # 3クラス出力に変更
+        self.value_fc2 = nn.Linear(64, 1)  # 1クラス出力（勝率のみ）
     
         # すべてのパラメータを0で初期化
         for p in self.parameters():
@@ -173,16 +146,14 @@ class DualNetwork(nn.Module):
         policy = self.relu(self.policy_bn(self.policy_conv(x)))
         policy = policy.view(-1, 4 * self.board_size * self.board_size)
         policy_logits = self.policy_fc(policy)
-        # log_softmaxは損失計算時に適用するため、ここでは生のlogitsを返す
-        
-        # 価値ヘッド
+        # log_softmaxは損失計算時に適用するため、ここでは生のlogitsを返す        # 価値ヘッド
         value = self.relu(self.value_bn(self.value_conv(x)))
         value = value.view(-1, 2 * self.board_size * self.board_size)
         value = self.relu(self.value_fc1(value))
         value = self.value_dropout(value)
-        value_logits = self.value_fc2(value)  # クロスエントロピー用のlogits出力
+        value_output = torch.sigmoid(self.value_fc2(value))  # sigmoidで0から1の範囲に制限（勝率）
         
-        return policy_logits, value_logits
+        return policy_logits, value_output
 
 class MCTSNode:
     """モンテカルロ木探索のノード"""
@@ -417,21 +388,19 @@ class MCTS:
         
         # 現在のプレイヤーを特定
         current_player = 1 if np.sum(state == 1) == np.sum(state == -1) else -1
-        
-        # 評価関数から方策と価値を取得（キャッシュなしで直接評価）
+          # 評価関数から方策と価値を取得（キャッシュなしで直接評価）
         state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         with torch.no_grad():
             # 最後の手と現在のプレイヤー情報を渡す
-            policy_logits, value_logits = self.model(state_tensor, last_move, current_player)
+            policy_logits, value_output = self.model(state_tensor, last_move, current_player)
         
         # policy_logitsは生のlogitsなので、softmaxを適用して確率分布に変換
         policy = F.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy()
         
-        # value_logitsを確率分布に変換し、期待値を計算
-        value_probs = F.softmax(value_logits, dim=1).squeeze(0)  # [3]
-        # 各クラス（敗北:-1, 引き分け:0, 勝利:1）の期待値を計算
-        value = -1.0 * value_probs[0] + 0.0 * value_probs[1] + 1.0 * value_probs[2]
-        value = value.item()
+        # value_outputは勝率（0から1の範囲）を直接出力
+        value = value_output.squeeze(0).item()  # [1] -> scalar
+        # 勝率を-1から1の範囲に変換（0.5を中心とした変換）
+        value = 2.0 * value - 1.0  # [0,1] -> [-1,1]
         
         policy_legal = np.zeros(self.board_size * self.board_size)
         legal_moves = self._get_legal_moves(state)
@@ -703,21 +672,19 @@ class MCTS:
             # ノードを展開
             leaf_node = search_path[-1]
             leaf_node.state = leaf_state.copy()
-            
-            # ニューラルネットワークで評価（最後の手と現在のプレイヤー情報を渡す）
+              # ニューラルネットワークで評価（最後の手と現在のプレイヤー情報を渡す）
             leaf_tensor = torch.tensor(leaf_state, dtype=torch.float32, device=device).unsqueeze(0)
             current_player = 1 if np.sum(leaf_state == 1) == np.sum(leaf_state == -1) else -1
             with torch.no_grad():
-                policy_logits, value_logits = self.model(leaf_tensor, last_move, current_player)
+                policy_logits, value_output = self.model(leaf_tensor, last_move, current_player)
             
             # policy_logitsは生のlogitsなので、softmaxを適用して確率分布に変換
             policy = F.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy()
             
-            # value_logitsをtanhに変換し、期待値を計算
-            value_probs = F.tanh(value_logits).squeeze(0)  # [3]
-            # 各クラス（敗北:-1, 引き分け:0, 勝利:1）の期待値を計算
-            value = -1.0 * value_probs[0] + 0.0 * value_probs[1] + 1.0 * value_probs[2]
-            value = value.item()
+            # value_outputは勝率（0から1の範囲）を直接出力
+            value = value_output.squeeze(0).item()  # [1] -> scalar
+            # 勝率を-1から1の範囲に変換（0.5を中心とした変換）
+            value = 2.0 * value - 1.0  # [0,1] -> [-1,1]
             
             # 合法手の取得と方策の正規化
             legal_moves = self._get_legal_moves(leaf_state)
@@ -997,20 +964,18 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001):
         epoch_policy_loss = 0
         epoch_value_loss = 0
         epoch_total_loss = 0
-        batch_count = 0
-        
+        batch_count = 0        
         for batch_states, batch_policies, batch_values in dataloader:
             batch_states = batch_states.to(device)
             batch_policies = batch_policies.to(device)
             batch_values = batch_values.to(device).view(-1)  # バッチサイズに合わせて形状調整
             
-            # 価値をクラスラベルに変換（クロスエントロピー損失用）
-            batch_value_labels = torch.tensor([value_to_class_label(v.item()) for v in batch_values], 
-                                            dtype=torch.long, device=device)
+            # 価値を-1から1の範囲から0から1の範囲に変換
+            batch_values_normalized = (batch_values + 1.0) / 2.0  # [-1,1] -> [0,1]
             
             # 予測
-            policy_logits, value_logits = model(batch_states)
-            # value_logitsは[batch_size, 3]の形状（3クラス分類）
+            policy_logits, value_output = model(batch_states)
+            # value_outputは[batch_size, 1]の形状（勝率回帰）
             
             # AlphaZero論文に従った損失関数の実装
             # Policy Loss: クロスエントロピー損失 = -Σ(πᵢ * log(pᵢ))
@@ -1018,8 +983,8 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001):
             log_probs = F.log_softmax(policy_logits, dim=1)
             policy_loss = -torch.sum(batch_policies * log_probs) / batch_states.size(0)
             
-            # Value Loss: クロスエントロピー損失（3クラス分類）
-            value_loss = F.cross_entropy(value_logits, batch_value_labels)
+            # Value Loss: 平均二乗誤差損失（勝率回帰）
+            value_loss = F.mse_loss(value_output.view(-1), batch_values_normalized)
             
             # L2正則化項（重みパラメータのみに適用、AlphaZero論文に従う）
             l2_reg = 0
@@ -1030,21 +995,15 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001):
             # 総損失の計算（AlphaZero論文の式に従う）
             # L = (z - v)² - π^T log p + c||θ||²
             total_loss = value_loss + policy_loss + l2_reg_weight * l2_reg
-            
-            # デバッグ：バッチごとの損失を出力（最初のエポックの最初の3バッチのみ）
+              # デバッグ：バッチごとの損失を出力（最初のエポックの最初の3バッチのみ）
             if epoch == 0 and batch_count < 3:
-                # 価値予測を確率分布に変換してデバッグ出力
-                value_probs = F.softmax(value_logits, dim=1)
-                predicted_classes = torch.argmax(value_probs, dim=1)
-                
                 print(f"Batch {batch_count}:")
                 print(f"  Policy Loss: {policy_loss.item():.6f}")
                 print(f"  Value Loss: {value_loss.item():.6f}")
                 print(f"  L2 Reg: {l2_reg.item():.6f}")
-                print(f"  Total Loss: {total_loss.item():.6f}")
-                print(f"  Predicted value classes: {predicted_classes[:5].detach().cpu().numpy()}")
-                print(f"  Target value classes: {batch_value_labels[:5].detach().cpu().numpy()}")
-                print(f"  Value probabilities sample: {value_probs[:5].detach().cpu().numpy()}")
+                print(f"  Total Loss: {total_loss.item():.6f}")                
+                print(f"  Predicted values: {value_output[:5].view(-1).detach().cpu().numpy()}")
+                print(f"  Target values (normalized): {batch_values_normalized[:5].detach().cpu().numpy()}")
                 print(f"  Original target values: {batch_values[:5].detach().cpu().numpy()}")
                 print(f"  Policy log_probs sample: {log_probs[0][:10].detach().cpu().numpy()}")
                 print(f"  Target policy sample: {batch_policies[0][:10].detach().cpu().numpy()}")
