@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 import concurrent.futures
 import threading
+import time
 from tqdm import tqdm
 
 from .node import MCTSNode
@@ -17,16 +18,22 @@ from .game_utils import (
     detect_winning_move, detect_blocking_move, has_open_four,
     is_winning_move, is_terminal, augment_data
 )
-from ..config import device
+from ..config import (
+    device, MCTS_NUM_SIMULATIONS, MCTS_C_PUCT, MCTS_USE_GUMBEL, 
+    MCTS_GUMBEL_SCALE, MCTS_ADD_ROOT_NOISE, MCTS_DIRICHLET_ALPHA, 
+    MCTS_DIRICHLET_WEIGHT, MCTS_TEMPERATURE_THRESHOLD, 
+    MCTS_INITIAL_TEMPERATURE, MCTS_FINAL_TEMPERATURE
+)
 
 
 class MCTS:
     """モンテカルロ木探索の実装"""
     
-    def __init__(self, model, num_simulations=200, c_puct=4.0, use_gumbel=False, 
-                 gumbel_scale=0.1, add_root_noise=True, dirichlet_alpha=0.15, 
-                 dirichlet_weight=0.25, temperature_threshold=30, 
-                 initial_temperature=1.0, final_temperature=1e-3):
+    def __init__(self, model, num_simulations=MCTS_NUM_SIMULATIONS, c_puct=MCTS_C_PUCT, 
+                 use_gumbel=MCTS_USE_GUMBEL, gumbel_scale=MCTS_GUMBEL_SCALE, 
+                 add_root_noise=MCTS_ADD_ROOT_NOISE, dirichlet_alpha=MCTS_DIRICHLET_ALPHA, 
+                 dirichlet_weight=MCTS_DIRICHLET_WEIGHT, temperature_threshold=MCTS_TEMPERATURE_THRESHOLD, 
+                 initial_temperature=MCTS_INITIAL_TEMPERATURE, final_temperature=MCTS_FINAL_TEMPERATURE):
         self.model = model
         self.num_simulations = num_simulations
         self.c_puct = c_puct
@@ -46,9 +53,21 @@ class MCTS:
         
         # スレッドロック
         self.lock = threading.Lock()
+        
+        # 統計情報
+        self.stats = {
+            'total_searches': 0,
+            'total_simulations': 0,
+            'winning_moves_found': 0,
+            'blocking_moves_found': 0,
+            'average_search_time': 0.0,
+            'search_times': []
+        }
 
     def search(self, state, last_move=None):
         """与えられた状態に基づいてMCTSを実行"""
+        start_time = time.time()
+        
         root = MCTSNode(0)
         root.state = state.copy()
         
@@ -71,24 +90,24 @@ class MCTS:
         policy_legal = np.zeros(self.board_size * self.board_size)
         legal_moves = get_legal_moves(state)
         
-        # 勝利パターンと防御パターンを検出
+        # 勝利パターンと防御パターンを効率的に検出
         winning_move = detect_winning_move(state.copy(), current_player, self.board_size)
-        blocking_move = None if winning_move is not None else detect_blocking_move(state.copy(), current_player, self.board_size)
-
-        # 勝利パターン検出時の処理
         if winning_move is not None:
-            if random.random() < 0.01:  # 1%の確率でログ出力
-                print("勝利パターン検出: 勝利確定の手を選択")
+            # 勝利確定手があれば即座に選択
+            self.stats['winning_moves_found'] += 1
             policy_legal = np.zeros(self.board_size * self.board_size)
             policy_legal[winning_move] = 1.0
+            self._update_search_stats(start_time)
             return policy_legal
             
-        # 負け防止パターン検出時の処理
+        # 相手の勝利を防ぐ必要がある場合
+        blocking_move = detect_blocking_move(state.copy(), current_player, self.board_size)
         if blocking_move is not None:
-            if random.random() < 0.01:  # 1%の確率でログ出力
-                print("敗北パターン検出: ブロック手を選択")
+            # 防御が必要な場合は防御手を選択
+            self.stats['blocking_moves_found'] += 1
             policy_legal = np.zeros(self.board_size * self.board_size)
             policy_legal[blocking_move] = 1.0
+            self._update_search_stats(start_time)
             return policy_legal
         
         # 通常のMCTSで探索
@@ -124,44 +143,40 @@ class MCTS:
         for action, child in root.children.items():
             visit_counts[action] = child.visit_count
         
-        # 現在の手数に基づいて温度パラメータを決定
-        move_count = self._get_move_count(state)
-        temperature = self.initial_temperature if move_count < self.temperature_threshold else self.final_temperature
+        # 現在の手数と訪問回数分布に基づいて適応的な温度を決定
+        temperature = self._get_adaptive_temperature(state, visit_counts)
         
         # ボルツマン分布を使用して方策を計算
         mcts_policy = self._boltzmann_policy(visit_counts, temperature)
         mcts_value = root.value()
+        
+        # 統計情報の更新
+        self._update_search_stats(start_time)
         
         return mcts_policy, mcts_value
 
     def _run_simulations_parallel(self, root, state, num_simulations):
         """MCTSのシミュレーションを並列実行"""
         # シミュレーション数が少ない場合はシーケンシャル実行
-        if num_simulations <= 16:
+        if num_simulations <= 32:
             for _ in range(num_simulations):
                 self._run_single_simulation(root, state.copy())
             return
             
-        # 並列実行
+        # 並列実行のためのバッチ処理
         import multiprocessing as mp
-        cpu_count = max(1, mp.cpu_count())
-        batch_size = max(1, min(16, num_simulations // cpu_count))
-        num_batches = num_simulations // batch_size
-        
-        if num_batches == 0:
-            for _ in range(num_simulations):
-                self._run_single_simulation(root, state.copy())
-            return
+        # CPUコア数に応じて最適化
+        cpu_count = max(1, min(4, mp.cpu_count()))  # 最大4スレッドに制限
+        batch_size = max(4, num_simulations // cpu_count)  # 最小バッチサイズを4に設定
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
             futures = []
-            for _ in range(num_batches):
-                futures.append(executor.submit(self._run_batch_simulations, root, state.copy(), batch_size))
-                
-            # 残りのシミュレーション
-            remainder = num_simulations % batch_size
-            if remainder > 0:
-                futures.append(executor.submit(self._run_batch_simulations, root, state.copy(), remainder))
+            remaining_sims = num_simulations
+            
+            while remaining_sims > 0:
+                current_batch = min(batch_size, remaining_sims)
+                futures.append(executor.submit(self._run_batch_simulations, root, state.copy(), current_batch))
+                remaining_sims -= current_batch
                 
             # 全てのバッチの完了を待機
             for future in concurrent.futures.as_completed(futures):
@@ -230,14 +245,14 @@ class MCTS:
             # 子ノードの作成
             for move in legal_moves:
                 leaf_node.children[move] = MCTSNode(policy_legal[move])
-        
-        # バックプロパゲーション
+          # バックプロパゲーション
         for node in reversed(search_path):
-            node.value_sum += value
-            node.visit_count += 1
-            # 勝利数を更新
-            if value > 0:
-                node.win_count += 1
+            with self.lock:  # スレッドセーフなアップデート
+                node.value_sum += value
+                node.visit_count += 1
+                # 勝率計算用：価値が正の場合を勝利とカウント
+                if value > 0:
+                    node.win_count += 1
             value = -value  # 交互に手番が変わるので、価値を反転
 
     def _select_child(self, node):
@@ -262,16 +277,7 @@ class MCTS:
 
     def _ucb_score(self, parent, child, action):
         """UCB (Upper Confidence Bound) スコアの計算"""
-        prior_score = self.c_puct * child.prior * math.sqrt(parent.visit_count) / (1 + child.visit_count)
-        
-        # 勝率（w/n）を計算
-        if child.visit_count > 0:
-            win_rate = child.win_rate()
-            value_score = win_rate
-        else:
-            value_score = 0
-        
-        # 勝ち確定手なら無限大のスコア
+        # 勝ち確定手なら無限大のスコア（早期チェック）
         if parent.state is not None:
             y, x = divmod(action, self.board_size)
             temp_state = parent.state.copy()
@@ -281,23 +287,49 @@ class MCTS:
             # 直接勝利する手は最優先
             if check_win_pattern_numba(temp_state, x, y, player, self.board_size):
                 return float('inf')
-                
-            # 元の判定も残す
-            if is_winning_move(parent.state, action, self.board_size) or has_open_four(parent.state, action, self.board_size):
-                return float('inf')
         
-        score = value_score + prior_score
-        return score
+        # 探索項：未訪問ノードを優先的に探索
+        prior_score = self.c_puct * child.prior * math.sqrt(parent.visit_count) / (1 + child.visit_count)
+        
+        # 価値項：平均価値を使用（-1から1の範囲）
+        if child.visit_count > 0:
+            value_score = child.value()
+        else:
+            value_score = 0
+        
+        return value_score + prior_score
 
     def _get_move_count(self, state):
         """盤面に置かれた石の数（着手数）を数える"""
         return np.count_nonzero(state)
 
+    def _get_adaptive_temperature(self, state, visit_counts):
+        """適応的な温度パラメータを計算"""
+        move_count = self._get_move_count(state)
+        
+        # 基本温度：手数に基づく
+        base_temperature = self.initial_temperature if move_count < self.temperature_threshold else self.final_temperature
+        
+        # 訪問回数の分散に基づく調整
+        if np.sum(visit_counts) > 0:
+            normalized_counts = visit_counts / np.sum(visit_counts)
+            # エントロピーを計算（選択の多様性を測定）
+            entropy = -np.sum(normalized_counts * np.log(normalized_counts + 1e-10))
+            max_entropy = np.log(len(np.nonzero(visit_counts)[0]))
+            
+            # エントロピーが高い場合（選択が分散）は温度を上げる
+            if max_entropy > 0:
+                entropy_factor = 1.0 + 0.5 * (entropy / max_entropy)
+                return base_temperature * entropy_factor
+        
+        return base_temperature
+
     def _boltzmann_policy(self, visit_counts, temperature):
         """ボルツマン分布を使用して訪問回数から方策を計算"""
         # 温度がほぼゼロの場合はグリーディー選択
         if temperature < 1e-6:
-            action = np.argmax(visit_counts)
+            max_indices = np.where(visit_counts == np.max(visit_counts))[0]
+            action = np.random.choice(max_indices)  # 同点の場合はランダム選択
             policy = np.zeros(len(visit_counts))
             policy[action] = 1.0
             return policy
@@ -308,6 +340,12 @@ class MCTS:
             # すべての訪問回数がゼロの場合は一様分布
             return np.ones(len(visit_counts)) / len(visit_counts)
         
+        if len(nonzero_indices) == 1:
+            # 一つの選択肢のみの場合
+            policy = np.zeros(len(visit_counts))
+            policy[nonzero_indices[0]] = 1.0
+            return policy
+        
         try:
             # ボルツマン分布: P(a) ∝ exp(N(a)/τ)
             counts = visit_counts[nonzero_indices]
@@ -317,22 +355,68 @@ class MCTS:
             
             # 数値安定性のために最大値を引く
             max_logit = np.max(logits)
-            exp_logits = np.exp(logits - max_logit)
+            shifted_logits = logits - max_logit
+            
+            # オーバーフロー防止
+            shifted_logits = np.clip(shifted_logits, -700, 700)
+            
+            exp_logits = np.exp(shifted_logits)
+            sum_exp = np.sum(exp_logits)
+            
+            # ゼロ除算防止
+            if sum_exp == 0 or not np.isfinite(sum_exp):
+                # フォールバック：最頻値を選択
+                max_indices = np.where(counts == np.max(counts))[0]
+                selected_idx = np.random.choice(max_indices)
+                policy = np.zeros(len(visit_counts))
+                policy[nonzero_indices[selected_idx]] = 1.0
+                return policy
             
             # 正規化してボルツマン確率を計算
-            boltzmann_probs = exp_logits / np.sum(exp_logits)
+            boltzmann_probs = exp_logits / sum_exp
             
             # 方策の初期化
             policy = np.zeros(len(visit_counts))
-            # 非ゼロ訪問回数の箇所にのみボルツマン確率を設定
             policy[nonzero_indices] = boltzmann_probs
             
+            # 最終的な正規化チェック
+            total_prob = np.sum(policy)
+            if total_prob > 0:
+                policy = policy / total_prob
+                
             return policy
             
         except Exception as e:
             # エラーが発生した場合は最も訪問回数の多い行動を選択
             print(f"ボルツマン分布計算中にエラーが発生: {e}")
-            action = np.argmax(visit_counts)
+            max_indices = np.where(visit_counts == np.max(visit_counts))[0]
+            action = np.random.choice(max_indices)
             policy = np.zeros(len(visit_counts))
             policy[action] = 1.0
             return policy
+
+    def _update_search_stats(self, start_time):
+        """検索統計の更新"""
+        elapsed_time = time.time() - start_time
+        self.stats['total_searches'] += 1
+        self.stats['total_simulations'] += self.num_simulations
+        self.stats['search_times'].append(elapsed_time)
+        
+        # 移動平均を計算（最新50回の平均）
+        recent_times = self.stats['search_times'][-50:]
+        self.stats['average_search_time'] = np.mean(recent_times)
+    
+    def get_stats(self):
+        """統計情報を取得"""
+        return self.stats.copy()
+    
+    def reset_stats(self):
+        """統計情報をリセット"""
+        self.stats = {
+            'total_searches': 0,
+            'total_simulations': 0,
+            'winning_moves_found': 0,
+            'blocking_moves_found': 0,
+            'average_search_time': 0.0,
+            'search_times': []
+        }

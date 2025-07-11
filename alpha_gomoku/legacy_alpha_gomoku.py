@@ -20,7 +20,7 @@ from numba import jit
 import concurrent.futures
 from functools import lru_cache
 import threading  # スレッドロック用に追加
-import argparse  # コマンドライン引数のパーサーを追加
+from alpha_gomoku.utils.game_recorder import GameRecorder
 
 # ゲーム設定
 DEFAULT_BOARD_SIZE = 8  # デフォルトのボードサイズ（標準的な五目並べ）
@@ -922,7 +922,7 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
     # 結果をキューに送信
     result_queue.put((game_idx, final_value))
 
-def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001):
+def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001, log_dir=None):
     """ニューラルネットワークの訓練 - 損失関数修正版"""
     model.train()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
@@ -1043,12 +1043,34 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001):
         # エポックごとの損失を追加
         total_policy_loss += avg_policy_loss
         total_value_loss += avg_value_loss
-        
-        # 現在の学習率を出力（デバッグ用）
+          # 現在の学習率を出力（デバッグ用）
         current_lr = optimizer.param_groups[0]['lr']
         print(f"Epoch {epoch+1}/{epochs}, LR: {current_lr:.6f}")
         print(f"  Policy Loss: {avg_policy_loss:.6f}, Value Loss: {avg_value_loss:.6f}")
         print(f"  Total Loss: {avg_total_loss:.6f}")
+        
+        # エポック毎の詳細ログを出力
+        print(f"  Batches processed: {batch_count}")
+        print(f"  Patience counter: {patience_counter}/{patience}")
+        print(f"  Best loss so far: {best_loss:.6f}")
+        
+        # エポック毎のログファイル保存
+        if log_dir:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            epoch_log_filename = os.path.join(log_dir, f'epoch_log_{epoch+1}_{timestamp}.txt')
+            
+            with open(epoch_log_filename, 'w') as f:
+                f.write(f"Epoch Log - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Epoch: {epoch+1}/{epochs}\n")
+                f.write(f"Learning Rate: {current_lr:.6f}\n")
+                f.write(f"Policy Loss: {avg_policy_loss:.6f}\n")
+                f.write(f"Value Loss: {avg_value_loss:.6f}\n")
+                f.write(f"Total Loss: {avg_total_loss:.6f}\n")
+                f.write(f"Batches Processed: {batch_count}\n")
+                f.write(f"Patience Counter: {patience_counter}/{patience}\n")
+                f.write(f"Best Loss: {best_loss:.6f}\n")
+                f.write(f"Replay Buffer Size: {len(replay_buffer)}\n")
+                f.write(f"Batch Size: {batch_size}\n")
         
         # 損失が異常値になった場合の対処
         if np.isnan(avg_policy_loss) or np.isnan(avg_value_loss):
@@ -1105,9 +1127,11 @@ class AlphaZero:
         self.policy_loss_history = []
         self.value_loss_history = []
         # イテレーション番号を追跡するリストを追加
-        self.iterations = []
-        # 学習率の履歴を記録するリストを追加
+        self.iterations = []        # 学習率の履歴を記録するリストを追加
         self.lr_history = []
+        
+        # 棋譜記録機能
+        self.game_recorder = GameRecorder(log_dir=self.timestamp_log_dir)
         
         # 既存のモデルをロード
         if os.path.exists(self.model_path):
@@ -1145,8 +1169,7 @@ class AlphaZero:
             model_filename = f'{self.model_base_name}_{stage}_{timestamp}.pth'
             
         save_path = os.path.join(self.checkpoint_dir, model_filename)
-        
-        # モデルの保存
+          # モデルの保存
         torch.save(self.model.state_dict(), save_path)
         print(f"モデルを保存しました: {save_path}")
         
@@ -1168,6 +1191,8 @@ class AlphaZero:
             
             # イテレーション番号を追加（重複しないように一度だけ追加）
             current_iter = iteration + 1
+            # 現在のイテレーションを記録
+            self.current_iteration = current_iter
             
             # 1. 自己対戦でデータ生成（並列）
             print("自己対戦でデータを生成中...")
@@ -1178,7 +1203,7 @@ class AlphaZero:
             
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
-            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr)
+            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr, log_dir=self.timestamp_log_dir)
             print(f"Policy Loss: {policy_loss:.4f}, Value Loss: {value_loss:.4f}")
             
             # 損失履歴に追加
@@ -1334,8 +1359,7 @@ class AlphaZero:
         # 全プロセス終了待ち
         for p in processes:
             p.join()
-        
-        # リプレイバッファにデータを追加（バッチ処理で効率化)
+          # リプレイバッファにデータを追加（バッチ処理で効率化)
         batch_size = 1000
         buffer_list = list(shared_buffer)
         for i in range(0, len(buffer_list), batch_size):
@@ -1344,6 +1368,10 @@ class AlphaZero:
                 self.replay_buffer.add(state, policy, value)
         
         print(f"リプレイバッファサイズ: {len(self.replay_buffer)}")
+        
+        # 棋譜記録機能: 1試合の棋譜を記録・保存
+        if hasattr(self, 'game_recorder') and len(buffer_list) > 0:
+            self._record_sample_game()
 
     def _self_play_process(self, model_path, board_size, shared_buffer, game_indices, result_queue):
         """自己対戦プロセス（価値計算修正版）"""
@@ -1550,6 +1578,175 @@ class AlphaZero:
         except Exception as e:
             print(f"最終バッファ転送中にエラーが発生: {e}")
 
+    def play_against_human(self):
+        """人間との対戦"""
+        env = GomokuEnv(board_size=self.board_size)
+        state = env.board.GetBoardInt()
+        
+        # MCTSの初期化 (対戦時はシミュレーション回数を適度に)
+        base_simulations = 2000
+        total_spaces = self.board_size * self.board_size
+        mcts = MCTS(self.model, num_simulations=base_simulations, use_gumbel=False)
+        
+        # 残り空きマスの数に応じてシミュレーション回数を調整する関数
+        def adjust_simulations(state):
+            remaining_spaces = np.sum(np.array(state) == 0)
+            ratio = remaining_spaces / total_spaces
+            # 最低でも基本シミュレーション数の20%は確保、最大は基本シミュレーション回数
+            adjusted_sims = max(int(base_simulations * ratio), int(base_simulations * 0.2))
+            return adjusted_sims
+        
+        done = False
+        human_first = input("先手で始めますか？ (y/n): ").lower() == 'y'
+        
+        if not human_first:
+            # AIの手番
+            state_array = np.array(state)
+            
+            # シミュレーション回数を調整
+            mcts.num_simulations = adjust_simulations(state_array)
+            
+            current_player = 1 if np.sum(state_array == 1) == np.sum(state_array == -1) else -1
+            
+            # 勝利パターンチェック
+            winning_move = mcts.detect_winning_move(state_array.copy(), current_player)
+            if winning_move is not None:
+                print("AIが勝利パターンを検出しました")
+                action_idx = winning_move
+            else:
+                # 負け防止パターンチェック
+                blocking_move = mcts.detect_blocking_move(state_array.copy(), current_player)
+                if blocking_move is not None:
+                    print("AIが負け防止パターンを検出しました")
+                    action_idx = blocking_move
+                else:
+                    # 通常のMCTSで手を決定
+                    mcts_policy = mcts.search(state_array)
+                    action_idx = np.argmax(mcts_policy)
+            
+            action = (action_idx % self.board_size, action_idx // self.board_size)
+            state, reward, done, _ = env.step(action)
+            state = state.cpu().numpy()
+            env.render()
+        
+        while not done:
+            # 人間の手番
+            try:
+                x = int(input(f"列 (0-{self.board_size-1}): "))
+                y = int(input(f"行 (0-{self.board_size-1}): "))
+                if x < 0 or x >= self.board_size or y < 0 or y >= self.board_size or state[y][x] != 0:
+                    print("無効な手です。再入力してください。")
+                    continue
+                action = (x, y)
+                state, reward, done, _ = env.step(action)
+                state = state.cpu().numpy()
+                env.render()
+                
+                if done:
+                    print("あなたの勝ちです！")
+                    break
+                
+                # AIの手番
+                state_array = np.array(state)
+                
+                # シミュレーション回数を現在の盤面状態に基づいて調整
+                mcts.num_simulations = adjust_simulations(state_array)
+                
+                current_player = 1 if np.sum(state_array == 1) == np.sum(state_array == -1) else -1
+                
+                # 勝利パターンチェック
+                winning_move = mcts.detect_winning_move(state_array.copy(), current_player)
+                if winning_move is not None:
+                    print("AIが勝利パターンを検出しました")
+                    action_idx = winning_move
+                    
+                    # 勝利確定手を実行
+                    action = (action_idx % self.board_size, action_idx // self.board_size)
+                    state, reward, done, _ = env.step(action)
+                    state = state.cpu().numpy()
+                    env.render()
+                    
+                    if done:
+                        print("AIの勝利です！")
+                    break  # 勝利確定なのでゲームを終了
+                else:
+                    # 負け防止パターンチェック
+                    blocking_move = mcts.detect_blocking_move(state_array.copy(), current_player)
+                    if blocking_move is not None:
+                        print("AIが負け防止パターンを検出しました")
+                        action_idx = blocking_move
+                    else:
+                        # 通常のMCTSで手を決定
+                        mcts_policy = mcts.search(state_array)
+                        action_idx = np.argmax(mcts_policy)
+                
+                action = (action_idx % self.board_size, action_idx // self.board_size)
+                state, reward, done, _ = env.step(action)
+                state = state.cpu().numpy()
+                env.render()
+                
+                if done:
+                    print("AIの勝利です！")
+                
+            except ValueError:
+                print("数値を入力してください")
+                continue
+    
+    def _record_sample_game(self):
+        """サンプルゲームを記録・保存"""
+        try:
+            print("サンプルゲームの棋譜を記録中...")
+            
+            # 環境の初期化
+            env = GomokuEnv(board_size=self.board_size)
+            mcts = MCTS(self.model, num_simulations=SIMULATIONS)
+            
+            # 棋譜記録開始
+            current_iteration = getattr(self, 'current_iteration', 0)
+            self.game_recorder.start_new_game(self.board_size, current_iteration)
+            
+            game_start_time = time.time()
+            state = env.board.GetBoardInt()
+            done = False
+            current_player = 1
+            move_count = 0
+            
+            # ゲーム実行
+            while not done and move_count < self.board_size * self.board_size:
+                move_count += 1
+                state_array = np.array(state)
+                
+                # MCTSで行動を選択
+                mcts_policy = mcts.search(state_array)
+                action_idx = np.argmax(mcts_policy)  # 最も確率の高い手を選択
+                action = (action_idx % self.board_size, action_idx // self.board_size)
+                
+                # 棋譜に手を記録
+                self.game_recorder.record_move(current_player, action[1], action[0], move_count)
+                
+                # 環境での行動実行
+                next_state, reward, done, _ = env.step(action)
+                state = next_state.cpu().numpy()
+                current_player *= -1
+            
+            # ゲーム終了処理
+            game_length = time.time() - game_start_time
+            winner = 1 if reward.item() > 0 else (2 if reward.item() < 0 else 0)
+            self.game_recorder.end_game(winner, game_length)
+            
+            # 棋譜を保存
+            saved_file = self.game_recorder.save_game_record(format='JSON')
+            print(f"棋譜を保存しました: {saved_file}")
+            
+            # 追加でPGN形式でも保存
+            pgn_file = self.game_recorder.save_game_record(format='PGN')
+            print(f"PGN棋譜を保存しました: {pgn_file}")
+            
+        except Exception as e:
+            print(f"棋譜記録中にエラーが発生しました: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def play_against_human(self):
         """人間との対戦"""
         env = GomokuEnv(board_size=self.board_size)

@@ -7,6 +7,7 @@ from .mcts.mcts import MCTS, MCTSNode
 from .training.replay_buffer import ReplayBuffer
 from .training.self_play import SelfPlayDataset
 from .training.trainer import AlphaZero, train_network
+from .config import Config, default_config
 
 __all__ = [
     'DualNetwork',

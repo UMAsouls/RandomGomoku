@@ -5,13 +5,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..config import device
+from ..config import device, NETWORK_NUM_CHANNELS, NETWORK_NUM_RES_BLOCKS, NETWORK_DROPOUT_RATE
 
 
 class DualNetwork(nn.Module):
     """方策と価値を出力するニューラルネットワーク"""
     
-    def __init__(self, board_size, num_channels=32, num_res_blocks=3):
+    def __init__(self, board_size, num_channels=NETWORK_NUM_CHANNELS, num_res_blocks=NETWORK_NUM_RES_BLOCKS):
         super(DualNetwork, self).__init__()
         self.board_size = board_size
         
@@ -40,7 +40,7 @@ class DualNetwork(nn.Module):
         self.value_conv = nn.Conv2d(128, 2, 1, stride=1)
         self.value_bn = nn.BatchNorm2d(2)
         self.value_fc1 = nn.Linear(2 * board_size * board_size, 64)
-        self.value_dropout = nn.Dropout(0.3)
+        self.value_dropout = nn.Dropout(NETWORK_DROPOUT_RATE)
         self.value_fc2 = nn.Linear(64, 1)
         
         # すべてのパラメータを0で初期化

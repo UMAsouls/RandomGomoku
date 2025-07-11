@@ -21,22 +21,30 @@ from ..mcts.game_utils import (
 )
 from .replay_buffer import ReplayBuffer
 from .train_network import train_network
-from ..config import device, SIMULATIONS
+from .training_utils import LossStabilizer, AdaptiveLearningRate, plot_stable_loss_history
+from ..utils.game_recorder import GameRecorder
+from ..config import (
+    device, SIMULATIONS, TRAINER_BOARD_SIZE, TRAINER_NUM_ITERATIONS,
+    TRAINER_NUM_SELF_PLAY_GAMES, TRAINER_INITIAL_LR, TRAINER_CHECKPOINT_DIR,
+    TRAINER_LOG_DIR, REPLAY_BUFFER_CAPACITY, SELF_PLAY_RESULT_WEIGHT_MIN,
+    SELF_PLAY_RESULT_WEIGHT_FACTOR
+)
 
 
 class AlphaZero:
     """AlphaZeroの実装"""
     
-    def __init__(self, board_size=19, num_iterations=100, num_self_play_games=64,
-                 checkpoint_dir='models', log_dir='logs', initial_lr=0.0005):
+    def __init__(self, board_size=TRAINER_BOARD_SIZE, num_iterations=TRAINER_NUM_ITERATIONS, 
+                 num_self_play_games=TRAINER_NUM_SELF_PLAY_GAMES,
+                 checkpoint_dir=TRAINER_CHECKPOINT_DIR, log_dir=TRAINER_LOG_DIR, 
+                 initial_lr=TRAINER_INITIAL_LR):
         self.board_size = board_size
         self.num_iterations = num_iterations
         self.num_self_play_games = num_self_play_games
         self.checkpoint_dir = checkpoint_dir
         self.log_dir = log_dir
         self.initial_lr = initial_lr
-        
-        # ディレクトリの作成
+          # ディレクトリの作成
         os.makedirs(checkpoint_dir, exist_ok=True)
         os.makedirs(log_dir, exist_ok=True)
         
@@ -44,7 +52,7 @@ class AlphaZero:
         self.model = DualNetwork(board_size).to(device)
         
         # リプレイバッファ
-        self.replay_buffer = ReplayBuffer(capacity=40000)
+        self.replay_buffer = ReplayBuffer(capacity=REPLAY_BUFFER_CAPACITY)
         
         # タイムスタンプの作成
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -64,6 +72,13 @@ class AlphaZero:
         self.value_loss_history = []
         self.iterations = []
         self.lr_history = []
+        
+        # 損失安定化ツール
+        self.loss_stabilizer = LossStabilizer(window_size=10)
+        self.adaptive_lr = AdaptiveLearningRate(initial_lr=self.initial_lr)
+        
+        # 棋譜記録機能
+        self.game_recorder = GameRecorder(log_dir=self.timestamp_log_dir)
         
         # 既存のモデルをロード
         self._load_existing_model()
@@ -108,8 +123,7 @@ class AlphaZero:
         
         # モデルの保存
         torch.save(self.model.state_dict(), save_path)
-        print(f"モデルを保存しました: {save_path}")
-        
+        print(f"モデルを保存しました: {save_path}")        
         # 最新のモデルパスを更新
         self.model_path = save_path
         return save_path
@@ -120,12 +134,9 @@ class AlphaZero:
             start_time = time.time()
             print(f"\nイテレーション {iteration+1}/{self.num_iterations}")
             
-            # 学習率の調整
-            current_lr = self.initial_lr * (0.5 ** (iteration // 20))
-            print(f"現在の初期学習率: {current_lr:.6f}")
-            self.lr_history.append(current_lr)
-            
             current_iter = iteration + 1
+            # 現在のイテレーションを記録
+            self.current_iteration = current_iter
             
             # 1. 自己対戦でデータ生成
             print("自己対戦でデータを生成中...")
@@ -136,20 +147,51 @@ class AlphaZero:
             
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
-            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr)
+            
+            # 基本的な学習率スケジュール
+            current_lr = self.initial_lr * (0.95 ** (iteration // 20))
+            
+            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr, log_dir=self.timestamp_log_dir)
             print(f"Policy Loss: {policy_loss:.4f}, Value Loss: {value_loss:.4f}")
             
+            # 学習率の調整（適応的）
+            total_loss = policy_loss + value_loss
+            lr_adjusted = self.adaptive_lr.step(total_loss)
+            current_lr = self.adaptive_lr.get_lr()
+            
+            if lr_adjusted:
+                print(f"適応的学習率調整: {current_lr:.6f}")
+                
+            print(f"現在の学習率: {current_lr:.6f}")
+            self.lr_history.append(current_lr)
+            
+            # 損失の安定性チェック
+            self.loss_stabilizer.add_loss(policy_loss, value_loss)
+            
+            # 損失爆発の検出
+            if self.loss_stabilizer.detect_loss_explosion():
+                print("警告: 損失の爆発が検出されました。学習率を緊急調整します。")
+                current_lr *= 0.1  # 学習率を急激に下げる
+                self.adaptive_lr.current_lr = current_lr
+            
             # 損失履歴に追加
-            if policy_loss > 0:
+            if policy_loss > 0 and value_loss > 0:
                 self.policy_loss_history.append(policy_loss)
                 self.value_loss_history.append(value_loss)
                 self.iterations.append(current_iter)
+            else:
+                print("警告: 無効な損失値が検出されました。")
+            
+            # 損失の安定性を報告
+            if self.loss_stabilizer.is_loss_stable():
+                print("✓ 損失が安定しています")
+            else:
+                print("! 損失が不安定です")
             
             # 訓練後のモデルを保存
             self.save_model("trained", iteration+1)
-            
-            # グラフを保存
-            self._plot_loss_history(iteration=current_iter)
+              # 安定化されたグラフを保存
+            self._plot_stable_loss_history(iteration=current_iter)
             
             # 3. ログファイルに保存
             self._save_training_log(iteration+1, current_lr, policy_loss, value_loss, start_time)
@@ -179,8 +221,48 @@ class AlphaZero:
         
         print(f"トレーニング情報をログに保存しました: {log_filename}")
     
+    def _plot_stable_loss_history(self, final=False, stage=None, iteration=None):
+        """安定化された損失の履歴をグラフ化して保存"""
+        if len(self.policy_loss_history) < 2:
+            print("グラフ作成にはデータが不足しています")
+            return
+            
+        # タイトルサフィックス
+        title_suffix = ""
+        if final:
+            title_suffix = " (Final)"
+        elif iteration:
+            title_suffix = f" (Iteration {iteration})"
+        
+        # ファイル名生成
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if final:
+            filename = f'stable_loss_history_final_{timestamp}.png'
+        elif iteration:
+            filename = f'stable_loss_history_iter{iteration}_{timestamp}.png'
+        else:
+            filename = f'stable_loss_history_{timestamp}.png'
+        
+        save_path = os.path.join(self.timestamp_log_dir, filename)
+        
+        # 安定化されたグラフを作成
+        plt_obj = plot_stable_loss_history(
+            self.policy_loss_history, 
+            self.value_loss_history, 
+            self.iterations, 
+            save_path
+        )
+        
+        # グラフを閉じる
+        plt_obj.close()
+        
+        print(f"安定化された損失グラフを保存しました: {save_path}")
+        
     def _plot_loss_history(self, final=False, stage=None, iteration=None):
-        """損失の履歴をグラフ化して保存"""
+        """従来の損失履歴グラフ（バックアップ用）"""
+        if len(self.policy_loss_history) < 2:
+            return
+            
         plt.figure(figsize=(15, 15))
         
         # グラフタイトル
@@ -237,8 +319,7 @@ class AlphaZero:
             plot_filename = os.path.join(self.timestamp_log_dir, f'loss_history_final_{timestamp}.png')
         
         plt.savefig(plot_filename, dpi=150)
-        plt.close()
-        
+        plt.close()        
         print(f"損失のグラフを保存しました: {plot_filename}")
     
     def _generate_self_play_data(self):
@@ -305,6 +386,10 @@ class AlphaZero:
                 self.replay_buffer.add(state, policy, value)
         
         print(f"リプレイバッファサイズ: {len(self.replay_buffer)}")
+        
+        # 棋譜記録機能: 1試合の棋譜を記録・保存
+        if hasattr(self, 'game_recorder') and len(buffer_list) > 0:
+            self._record_sample_game()
     
     def _self_play_process(self, model_path, board_size, shared_buffer, game_indices, result_queue):
         """自己対戦プロセス"""
@@ -439,10 +524,9 @@ class AlphaZero:
                     else:
                         # プレイヤー視点でのゲーム結果を計算
                         final_value = final_game_result if hist_player == 1 else -final_game_result
-                    
-                    # MCTSの価値と最終結果を重み付け平均で組み合わせ
+                      # MCTSの価値と最終結果を重み付け平均で組み合わせ
                     game_progress = i / len(game_memory)
-                    result_weight = 0.2 + 0.6 * game_progress
+                    result_weight = SELF_PLAY_RESULT_WEIGHT_MIN + SELF_PLAY_RESULT_WEIGHT_FACTOR * game_progress
                     mcts_weight = 1.0 - result_weight
                     
                     training_value = mcts_weight * hist_mcts_value + result_weight * final_value
@@ -589,8 +673,7 @@ class AlphaZero:
                     if done:
                         print("AIの勝利です！")
                     break
-                else:
-                    # 負け防止パターンチェック
+                else:                    # 負け防止パターンチェック
                     blocking_move = detect_blocking_move(state_array.copy(), current_player, self.board_size)
                     if blocking_move is not None:
                         print("AIが負け防止パターンを検出しました")
@@ -611,3 +694,60 @@ class AlphaZero:
             except ValueError:
                 print("数値を入力してください")
                 continue
+    
+    def _record_sample_game(self):
+        """サンプルゲームを記録・保存"""
+        try:
+            print("サンプルゲームの棋譜を記録中...")
+              # 環境の初期化
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            from GomokuEnv import GomokuEnv
+            env = GomokuEnv(board_size=self.board_size)
+            mcts = MCTS(self.model, num_simulations=SIMULATIONS)
+            
+            # 棋譜記録開始
+            current_iteration = getattr(self, 'current_iteration', 0)
+            self.game_recorder.start_new_game(self.board_size, current_iteration)
+            
+            game_start_time = time.time()
+            state = env.board.GetBoardInt()
+            done = False
+            current_player = 1
+            move_count = 0
+            
+            # ゲーム実行
+            while not done and move_count < self.board_size * self.board_size:
+                move_count += 1
+                state_array = np.array(state)
+                  # MCTSで行動を選択
+                mcts_policy, mcts_value = mcts.search(state_array)
+                action_idx = np.argmax(mcts_policy)  # 最も確率の高い手を選択
+                action = (action_idx % self.board_size, action_idx // self.board_size)
+                
+                # 棋譜に手を記録
+                self.game_recorder.record_move(current_player, action[1], action[0], move_count)
+                
+                # 環境での行動実行
+                next_state, reward, done, _ = env.step(action)
+                state = next_state.cpu().numpy()
+                current_player *= -1
+            
+            # ゲーム終了処理
+            game_length = time.time() - game_start_time
+            winner = 1 if reward.item() > 0 else (2 if reward.item() < 0 else 0)
+            self.game_recorder.end_game(winner, game_length)
+            
+            # 棋譜を保存
+            saved_file = self.game_recorder.save_game_record(format='JSON')
+            print(f"棋譜を保存しました: {saved_file}")
+            
+            # 追加でPGN形式でも保存
+            pgn_file = self.game_recorder.save_game_record(format='PGN')
+            print(f"PGN棋譜を保存しました: {pgn_file}")
+            
+        except Exception as e:
+            print(f"棋譜記録中にエラーが発生しました: {e}")
+            import traceback
+            traceback.print_exc()

@@ -5,17 +5,21 @@
 import argparse
 import os
 import datetime
+from ..config import (
+    DEFAULT_BOARD_SIZE, DEFAULT_ITERATIONS, DEFAULT_SELF_PLAY_GAMES,
+    DEFAULT_LEARNING_RATE, TRAINER_CHECKPOINT_DIR, TRAINER_LOG_DIR
+)
 
 
 def get_args():
     """コマンドライン引数を取得"""
     parser = argparse.ArgumentParser(description='AlphaGomoku Training')
-    parser.add_argument('--board_size', type=int, default=8, help='Board size (default: 8)')
-    parser.add_argument('--iterations', type=int, default=100, help='Training iterations (default: 100)')
-    parser.add_argument('--games', type=int, default=32, help='Self-play games per iteration (default: 32)')
-    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate (default: 0.001)')
-    parser.add_argument('--checkpoint_dir', type=str, default='models', help='Checkpoint directory (default: models)')
-    parser.add_argument('--log_dir', type=str, default='logs', help='Log directory (default: logs)')
+    parser.add_argument('--board_size', type=int, default=DEFAULT_BOARD_SIZE, help=f'Board size (default: {DEFAULT_BOARD_SIZE})')
+    parser.add_argument('--iterations', type=int, default=DEFAULT_ITERATIONS, help=f'Training iterations (default: {DEFAULT_ITERATIONS})')
+    parser.add_argument('--games', type=int, default=DEFAULT_SELF_PLAY_GAMES, help=f'Self-play games per iteration (default: {DEFAULT_SELF_PLAY_GAMES})')
+    parser.add_argument('--lr', type=float, default=DEFAULT_LEARNING_RATE, help=f'Learning rate (default: {DEFAULT_LEARNING_RATE})')
+    parser.add_argument('--checkpoint_dir', type=str, default=TRAINER_CHECKPOINT_DIR, help=f'Checkpoint directory (default: {TRAINER_CHECKPOINT_DIR})')
+    parser.add_argument('--log_dir', type=str, default=TRAINER_LOG_DIR, help=f'Log directory (default: {TRAINER_LOG_DIR})')
     return parser.parse_args()
 
 
