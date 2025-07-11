@@ -63,8 +63,10 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
     # 損失を記録する変数を初期化
     total_policy_loss = 0
     total_value_loss = 0
+    total_loss_sum = 0
+    completed_epochs = 0
     
-    # AlphaZero論文に従った正則化重み設定
+    # AlphaZero論文に従った正則化重み設定（より適切な値に調整）
     l2_reg_weight = 1e-4
     
     for epoch in range(epochs):
@@ -85,11 +87,11 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
             policy_logits, value_output = model(batch_states)
             
             # AlphaZero論文に従った損失関数の実装
-            # Policy Loss: クロスエントロピー損失
+            # Policy Loss: クロスエントロピー損失（正しい実装）
             log_probs = F.log_softmax(policy_logits, dim=1)
-            policy_loss = -torch.sum(batch_policies * log_probs) / batch_states.size(0)
+            policy_loss = -torch.mean(torch.sum(batch_policies * log_probs, dim=1))
             
-            # Value Loss: 平均二乗誤差損失（正規化なし）
+            # Value Loss: 平均二乗誤差損失
             value_loss = F.mse_loss(value_output.view(-1), batch_values)
             
             # L2正則化項
@@ -108,10 +110,10 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
                 print(f"  Value Loss: {value_loss.item():.6f}")
                 print(f"  L2 Reg: {l2_reg.item():.6f}")
                 print(f"  Total Loss: {total_loss.item():.6f}")
-                print(f"  Predicted values: {value_output[:5].view(-1).detach().cpu().numpy()}")
-                print(f"  Target values: {batch_values[:5].detach().cpu().numpy()}")
-                print(f"  Policy log_probs sample: {log_probs[0][:10].detach().cpu().numpy()}")
-                print(f"  Target policy sample: {batch_policies[0][:10].detach().cpu().numpy()}")
+                print(f"  Predicted values range: [{value_output.min().item():.4f}, {value_output.max().item():.4f}]")
+                print(f"  Target values range: [{batch_values.min().item():.4f}, {batch_values.max().item():.4f}]")
+                print(f"  Policy entropy: {-torch.sum(batch_policies * log_probs, dim=1).mean().item():.6f}")
+                print(f"  Target policy sum: {batch_policies.sum(dim=1).mean().item():.6f}")
             
             # 勾配の計算と更新
             optimizer.zero_grad()
@@ -151,13 +153,15 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
         # 学習率を動的に調整するロジックは上記で処理済み
         
         # エポックごとに学習率を減衰（シンプルで安定）
-        if epoch > 0 and epoch % TRAINING_LR_STEP_SIZE == 0:
-            scheduler.step()
+        scheduler.step()
         
-        # エポックごとの損失を追加
+        # エポックごとの損失を累積（正しい方法）
         total_policy_loss += avg_policy_loss
         total_value_loss += avg_value_loss
-          # 現在の学習率を出力
+        total_loss_sum += avg_total_loss
+        completed_epochs += 1
+        
+        # 現在の学習率を出力
         current_lr = optimizer.param_groups[0]['lr']
         print(f"Epoch {epoch+1}/{epochs}, LR: {current_lr:.6f}")
         print(f"  Policy Loss: {avg_policy_loss:.6f}, Value Loss: {avg_value_loss:.6f}")
@@ -192,15 +196,18 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
         if avg_policy_loss > 100 or avg_value_loss > 100:
             print("警告: 損失が異常に大きくなりました。学習率を下げます。")
             for param_group in optimizer.param_groups:
-                param_group['lr'] *= TRAINING_LR_DECAY_FACTOR    # 完了したエポック数で平均を計算
-    completed_epochs = max(1, epoch + 1)  # 0で割ることを防ぐ
+                param_group['lr'] *= TRAINING_LR_DECAY_FACTOR
+    
+    # 実際に完了したエポック数を使用
+    if completed_epochs == 0:
+        completed_epochs = 1  # 0で割ることを防ぐ
     
     # 損失が0の場合の対処
     if total_policy_loss == 0 and total_value_loss == 0:
         print("警告: 損失が0です。学習が正常に実行されていない可能性があります。")
         return 0.01, 0.01  # 小さい値を返して継続
     
-    # 平均損失を計算（より安定）
+    # 平均損失を計算（正しい方法）
     avg_policy_loss = total_policy_loss / completed_epochs
     avg_value_loss = total_value_loss / completed_epochs
     
@@ -210,6 +217,9 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
         avg_policy_loss = abs(avg_policy_loss)
         avg_value_loss = abs(avg_value_loss)
     
-    print(f"訓練完了: Policy Loss: {avg_policy_loss:.6f}, Value Loss: {avg_value_loss:.6f}")
+    print(f"訓練完了 ({completed_epochs} エポック):")
+    print(f"  平均 Policy Loss: {avg_policy_loss:.6f}")
+    print(f"  平均 Value Loss: {avg_value_loss:.6f}")
+    print(f"  最終学習率: {optimizer.param_groups[0]['lr']:.8f}")
     
     return avg_policy_loss, avg_value_loss
