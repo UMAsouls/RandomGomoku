@@ -10,7 +10,7 @@ import GomokuEnv
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class AlphaGomokuGUI:
-    def __init__(self, board_size=19, model_path='models/alpha_gomoku_19.pth'):
+    def __init__(self, board_size=15, model_path='models/alpha_gomoku_15.pth'):
         self.board_size = board_size
         self.model_path = model_path
         self.cell_size = 40  # セルサイズを40に拡大（元は20）
@@ -36,7 +36,7 @@ class AlphaGomokuGUI:
         self.model.eval()  # 評価モード
         
         # MCTSの初期化
-        self.mcts = MCTS(self.model, num_simulations=200)  # 実戦時はシミュレーション回数を増やす
+        self.mcts = MCTS(self.model, num_simulations=800)  # 実戦時はシミュレーション回数を増やす
         
         # 環境の初期化
         self.env = GomokuEnv.GomokuEnv(board_size=board_size)
@@ -252,41 +252,62 @@ class AlphaGomokuGUI:
 
     # AIの手を決める（ルールベースとMCTSを組み合わせる）
     def get_ai_move(self):
+        """AIの手を決める（定期的に画面を更新する）"""
         # AIプレイヤー番号を取得（環境の現在のプレイヤー）
         current_player = self.env.current_player
+        start_time = pygame.time.get_ticks()
+        
+        # 定期的に画面を更新しながら処理
+        def update_thinking_display():
+            if pygame.time.get_ticks() - start_time > 100:  # 100msごとに更新
+                self.draw_board()
+                self.display_thinking(process=True)
         
         # 1. 勝利できる手があればそれを選択
+        update_thinking_display()
         winning_move = self.detect_winning_move(current_player)
         if winning_move:
             print("AIが勝利パターンを検出しました")
             return winning_move
             
         # 2. 負けを回避する手があればそれを選択
+        update_thinking_display()
         blocking_move = self.detect_blocking_move(current_player)
         if blocking_move:
             print("AIが防御パターンを検出しました")
             return blocking_move
         
-
+        # 3. 相手の3つ並びを検出して対応
+        update_thinking_display()
+        three_in_row_moves = self.detect_three_in_a_row(current_player)
+        if three_in_row_moves:
+            print("AIが相手の3連を検出しました")
+            
+            # MCTSのポリシーを取得（処理中も画面更新）
+            update_thinking_display()
+            mcts_policy = self.mcts.search(np.array(self.state))
+            update_thinking_display()
+            
+            # 候補手のうち、MCTSの評価が最も高いものを選択
+            best_score = -1
+            best_move = None
+            for move in three_in_row_moves:
+                x, y = move
+                move_idx = y * self.board_size + x
+                score = mcts_policy[move_idx]
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+            
+            if best_move:
+                return best_move
         
-
-
-
-        # 4. 上記に該当しない場合はMCTSで手を決める
-        mcts_result = self.mcts.search(np.array(self.state))
-
+        # 4. 上記に該当しない場合はMCTSで手を決める（長時間処理なので定期的に更新）
+        update_thinking_display()
+        mcts_policy = self.mcts.search(np.array(self.state))
+        update_thinking_display()
         
-        # MCTSの結果がタプル（policy, value）かpolicyのみかを判定
-        if isinstance(mcts_result, tuple):
-            mcts_policy, _ = mcts_result
-        else:
-            mcts_policy = mcts_result
-        print(f"MCTSポリシー: {mcts_policy}")
-        print(f"MCTSポリシーの合計: {np.sum(mcts_policy)}")
-        # 最大値が複数ある場合にランダムに選ぶ
-        max_indices = np.where(mcts_policy == np.max(mcts_policy))[0]
-        print(f"最大値のインデックス: {max_indices}")
-        action_idx = np.random.choice(max_indices)
+        action_idx = np.argmax(mcts_policy)
         return (action_idx % self.board_size, action_idx // self.board_size)
 
     def get_human_action(self):
@@ -327,6 +348,33 @@ class AlphaGomokuGUI:
         
         return self.board_size  # デフォルトのボードサイズを返す
 
+    def display_thinking(self, process=False):
+        """AIが思考中であることを表示"""
+        thinking_overlay = pygame.Surface((300, 50), pygame.SRCALPHA)
+        thinking_overlay.fill((0, 0, 0, 128))  # 半透明の黒背景
+        
+        font = self.get_jpn_font(24)
+        
+        # 処理中の場合はドットアニメーションを表示
+        if process:
+            # 現在の経過時間に基づいてドットの数を決める
+            dots = "." * (int(pygame.time.get_ticks() / 500) % 4)
+            thinking_text = font.render(f"AIが思考中{dots}", True, (255, 255, 255))
+        else:
+            thinking_text = font.render("AIが思考中...", True, (255, 255, 255))
+            
+        text_rect = thinking_text.get_rect(center=(150, 25))
+        
+        thinking_overlay.blit(thinking_text, text_rect)
+        self.screen.blit(thinking_overlay, (self.screen_size//2 - 150, self.screen_size - 70))
+        pygame.display.flip()  # 画面を更新
+        
+        # イベント処理（ウィンドウを閉じられるようにする）
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
     def run(self):
         human_first = self.choose_player()
         self.human_is_black = human_first  # 人間が黒（先手）かどうかを保存
@@ -362,11 +410,18 @@ class AlphaGomokuGUI:
             self.draw_board()
             pygame.display.flip()
             
+            # AIの思考中表示
+            self.display_thinking()
+            
             # AIの手番（ルールベース+MCTS）
             action = self.get_ai_move()
             next_state, reward, done, _ = self.env.step(action)
             self.state = next_state.cpu().numpy()
             self.last_move = action  # 最後の手を更新
+            
+            # AIが打った後に必ず画面を更新
+            self.draw_board()
+            pygame.display.flip()
         
         # メインゲームループ
         while not done:
@@ -379,18 +434,26 @@ class AlphaGomokuGUI:
             self.state = next_state.cpu().numpy()
             self.last_move = action  # 最後の手を更新
             
+            # 人間の手を表示
+            self.draw_board()
+            pygame.display.flip()
+            
             if done:
                 self.display_winner("あなたの勝ちです！")
                 break
             
-            self.draw_board()
-            pygame.display.flip()
+            # AIの思考中表示
+            self.display_thinking()
             
             # AIの手番（ルールベース+MCTS）
             action = self.get_ai_move()
             next_state, reward, done, _ = self.env.step(action)
             self.state = next_state.cpu().numpy()
             self.last_move = action  # 最後の手を更新
+            
+            # AIの手を表示するために明示的に画面を更新
+            self.draw_board()
+            pygame.display.flip()
             
             if done:
                 self.display_winner("AIの勝ちです!")
@@ -437,6 +500,7 @@ class AlphaGomokuGUI:
         
         return choice
     
+    
     def display_winner(self, message):
         """勝者を表示"""
         self.draw_board()
@@ -456,5 +520,5 @@ class AlphaGomokuGUI:
                     waiting = False  # キー入力またはマウスクリックでゲーム終了画面を閉じる
 
 # 実行部分
-gui = AlphaGomokuGUI(board_size=8, model_path='models/alpha_gomoku_8_iter2_trained_20250707_153216.pth')
+gui = AlphaGomokuGUI(board_size=15, model_path='models/alpha_gomoku_15_iter235_trained_20250629_165719.pth')
 gui.run()

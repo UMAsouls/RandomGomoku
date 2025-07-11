@@ -75,6 +75,7 @@ class GomokuEnv:
         # 次のプレイヤーに交代
         self.current_player = 3 - self.current_player
 
+
         # 盤面をPyTorchテンソルに変換してGPUに転送
         board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
         return board_tensor, reward, done, {"which_player":now_player}

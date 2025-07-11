@@ -48,7 +48,7 @@ def simulate_games(num_games=100, board_size=7, model_path='models/alpha_gomoku_
     model.eval()  # 評価モード
     
     # MCTSの初期化
-    mcts = MCTS(model, num_simulations=800)  # シミュレーション回数
+    mcts = MCTS(model, num_simulations=1000)  # シミュレーション回数
     
     # ランダムプレイヤーの初期化
     random_player = RandomPlayer(board_size)
@@ -70,8 +70,19 @@ def simulate_games(num_games=100, board_size=7, model_path='models/alpha_gomoku_
         while not done:
             if (alpha_first and env.current_player == 1) or (not alpha_first and env.current_player == 2):
                 # AlphaGomokuの手番
-                mcts_policy = mcts.search(np.array(state))
-                action_idx = np.argmax(mcts_policy)
+                mcts_result = mcts.search(np.array(state))
+                
+                # MCTSの結果がタプル（policy, value）かpolicyのみかを判定
+                if isinstance(mcts_result, tuple):
+                    mcts_policy, _ = mcts_result
+                else:
+                    mcts_policy = mcts_result
+                print(f"MCTSポリシー: {mcts_policy}")
+
+                max_indices = np.where(mcts_policy == np.max(mcts_policy))[0]
+                print(f"MCTSポリシーの合計: {np.sum(mcts_policy)}")
+                print(f"最大値のインデックス: {max_indices}")
+                action_idx = np.random.choice(max_indices)
                 action = (action_idx % board_size, action_idx // board_size)
             else:
                 # ランダムプレイヤーの手番
@@ -174,9 +185,9 @@ def plot_results(results, alpha_wins, alpha_losses, total_games):
 
 if __name__ == "__main__":
     # パラメータ設定
-    NUM_GAMES = 100
-    BOARD_SIZE = 7
-    MODEL_PATH = 'models/alpha_gomoku_7_20250524_084916.pth'
+    NUM_GAMES = 10
+    BOARD_SIZE = 8
+    MODEL_PATH = 'models/alpha_gomoku_8_iter2_trained_20250707_153216.pth'
     
     # シミュレーション実行
     start_time = time.time()

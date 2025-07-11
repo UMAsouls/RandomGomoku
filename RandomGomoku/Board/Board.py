@@ -45,18 +45,39 @@ class Board():
             black_rand1, black_rand2
         ]
         
+        # 白い石の位置を記録するリスト
+        white_positions = []
+        
         for i in white_rands:
             pos = i.RandomMassGet()
             self.SetStone(pos[0], pos[1], Stone.WHITE)
+            white_positions.append(pos)
             
+        # 黒い石を白い石と重ならない位置に配置する
+        black_position = None
+        max_attempts = 100  # 無限ループを防ぐための試行回数上限
         
-        bpos1 = black_rand1.RandomMassGet()
-        bpos2 = black_rand2.RandomMassGet()
+        for _ in range(max_attempts):
+            if randint(0, 1) == 0:
+                bpos = black_rand1.RandomMassGet()
+            else:
+                bpos = black_rand2.RandomMassGet()
+            
+            # 白い石と重なっていないかチェック
+            if bpos not in white_positions:
+                black_position = bpos
+                break
         
-        if(randint(0,1) == 0): bpos = bpos1
-        else: bpos = bpos2
-        
-        self.SetStone(bpos[0], bpos[1], Stone.BLACK)
+        # 重ならない位置が見つかった場合、または最大試行回数に達した場合
+        if black_position:
+            self.SetStone(black_position[0], black_position[1], Stone.BLACK)
+        else:
+            # 全ての試行で重なりが発生した場合、空いている任意の場所に配置
+            for x in range(self.__width):
+                for y in range(self.__height):
+                    if [x, y] not in white_positions:
+                        self.SetStone(x, y, Stone.BLACK)
+                        return
         
         
     def MakeBoard(self, w:int, h:int):

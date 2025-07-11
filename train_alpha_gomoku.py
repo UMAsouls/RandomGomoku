@@ -110,6 +110,16 @@ def self_play(agent, num_games=10):
 def train_agent(iterations=50, games_per_iteration=10, batch_size=128, epochs=10, model_dir="models"):
     """Main training loop"""
     board_size = 19
+    
+    # # Find the latest model to continue training
+    # latest_model_path = None
+    # if os.path.exists(model_dir):
+    #     model_files = [f for f in os.listdir(model_dir) if f.startswith("alpha_gomoku_iter_") and f.endswith(".pt")]
+    #     if model_files:
+    #         latest_model_file = max(model_files, key=lambda f: int(f.split('_')[-1].split('.')[0]))
+    #         latest_model_path = os.path.join(model_dir, latest_model_file)
+    
+    # agent = AlphaGomokuAgent(board_size=board_size, model_path=latest_model_path)
     agent = AlphaGomokuAgent(board_size=board_size)
     
     if not os.path.exists(model_dir):
