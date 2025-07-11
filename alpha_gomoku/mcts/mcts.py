@@ -247,12 +247,7 @@ class MCTS:
                 leaf_node.children[move] = MCTSNode(policy_legal[move])
           # バックプロパゲーション
         for node in reversed(search_path):
-            with self.lock:  # スレッドセーフなアップデート
-                node.value_sum += value
-                node.visit_count += 1
-                # 勝率計算用：価値が正の場合を勝利とカウント
-                if value > 0:
-                    node.win_count += 1
+            node.update(value)
             value = -value  # 交互に手番が変わるので、価値を反転
 
     def _select_child(self, node):
@@ -415,6 +410,11 @@ class MCTS:
         self.stats = {
             'total_searches': 0,
             'total_simulations': 0,
+            'winning_moves_found': 0,
+            'blocking_moves_found': 0,
+            'average_search_time': 0.0,
+            'search_times': []
+        }
             'winning_moves_found': 0,
             'blocking_moves_found': 0,
             'average_search_time': 0.0,

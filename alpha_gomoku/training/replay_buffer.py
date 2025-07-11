@@ -20,8 +20,8 @@ class ReplayBuffer:
     def sample(self, batch_size):
         """ランダムにバッチサイズ分のサンプルを取得"""
         if len(self.buffer) < batch_size:
-            # バッファサイズがバッチサイズより小さい場合は重複を許可
-            indices = np.random.choice(len(self.buffer), batch_size, replace=True)
+            # バッファサイズがバッチサイズより小さい場合は全データを返す
+            indices = range(len(self.buffer))
         else:
             indices = np.random.choice(len(self.buffer), batch_size, replace=False)
         states, policies, values = zip(*[self.buffer[idx] for idx in indices])

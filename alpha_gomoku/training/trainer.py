@@ -148,8 +148,8 @@ class AlphaZero:
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
             
-            # 基本的な学習率スケジュール
-            current_lr = self.initial_lr * (0.95 ** (iteration // 20))
+            # 適応的学習率を取得
+            current_lr = self.adaptive_lr.get_lr()
             
             policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr, log_dir=self.timestamp_log_dir)
             print(f"Policy Loss: {policy_loss:.4f}, Value Loss: {value_loss:.4f}")

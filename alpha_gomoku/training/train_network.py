@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import StepLR
 import numpy as np
 
 from .self_play import SelfPlayDataset
@@ -29,9 +28,12 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
         print(f"警告: リプレイバッファのサイズが不足しています ({len(replay_buffer)} < {batch_size})")
         return 0, 0
     
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=TRAINING_WEIGHT_DECAY)
-      # 学習率スケジューラ（より安定した設定）
-    scheduler = StepLR(optimizer, step_size=TRAINING_LR_STEP_SIZE, gamma=TRAINING_LR_GAMMA)
+    # AlphaZero論文に従った正則化重み設定
+    l2_reg_weight = 1e-4
+
+    # オプティマイザの設定はそのまま活かす
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=l2_reg_weight) # weight_decayに定数を直接指定
+    # 学習率スケジューラを削除（AdaptiveLearningRateに一本化）
     
     # リプレイバッファからデータを取得
     max_samples = min(len(replay_buffer), TRAINING_MAX_SAMPLES)
@@ -64,9 +66,6 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
     total_policy_loss = 0
     total_value_loss = 0
     
-    # AlphaZero論文に従った正則化重み設定
-    l2_reg_weight = 1e-4
-    
     for epoch in range(epochs):
         epoch_policy_loss = 0
         epoch_value_loss = 0
@@ -78,8 +77,7 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
             batch_policies = batch_policies.to(device)
             batch_values = batch_values.to(device).view(-1)
             
-            # 価値の正規化を削除（既にクリップされている）
-            # batch_values_normalized = (batch_values + 1.0) / 2.0
+
             
             # 予測
             policy_logits, value_output = model(batch_states)
@@ -92,21 +90,14 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
             # Value Loss: 平均二乗誤差損失（正規化なし）
             value_loss = F.mse_loss(value_output.view(-1), batch_values)
             
-            # L2正則化項
-            l2_reg = 0
-            for name, param in model.named_parameters():
-                if 'weight' in name:
-                    l2_reg += torch.norm(param, p=2)
-            
-            # 総損失の計算
-            total_loss = value_loss + policy_loss + l2_reg_weight * l2_reg
+            # 総損失の計算をシンプルにする
+            total_loss = value_loss + policy_loss # + l2_reg_weight * l2_reg
             
             # デバッグ：バッチごとの損失を出力（最初のエポックの最初の3バッチのみ）
             if epoch == 0 and batch_count < 3:
                 print(f"Batch {batch_count}:")
                 print(f"  Policy Loss: {policy_loss.item():.6f}")
                 print(f"  Value Loss: {value_loss.item():.6f}")
-                print(f"  L2 Reg: {l2_reg.item():.6f}")
                 print(f"  Total Loss: {total_loss.item():.6f}")
                 print(f"  Predicted values: {value_output[:5].view(-1).detach().cpu().numpy()}")
                 print(f"  Target values: {batch_values[:5].detach().cpu().numpy()}")
@@ -150,9 +141,7 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
           # 損失変化が小さすぎる場合の対処を削除（安定化のため）
         # 学習率を動的に調整するロジックは上記で処理済み
         
-        # エポックごとに学習率を減衰（シンプルで安定）
-        if epoch > 0 and epoch % TRAINING_LR_STEP_SIZE == 0:
-            scheduler.step()
+        # エポックごとの学習率減衰を削除（AdaptiveLearningRateに一本化）
         
         # エポックごとの損失を追加
         total_policy_loss += avg_policy_loss
@@ -207,9 +196,14 @@ def train_network(model, replay_buffer, epochs=TRAINING_EPOCHS, batch_size=TRAIN
     # 損失の妥当性チェック
     if avg_policy_loss < 0 or avg_value_loss < 0:
         print(f"警告: 負の損失が検出されました。Policy: {avg_policy_loss}, Value: {avg_value_loss}")
-        avg_policy_loss = abs(avg_policy_loss)
-        avg_value_loss = abs(avg_value_loss)
+    avg_policy_loss = abs(avg_policy_loss)
+    avg_value_loss = abs(avg_value_loss)
     
     print(f"訓練完了: Policy Loss: {avg_policy_loss:.6f}, Value Loss: {avg_value_loss:.6f}")
     
     return avg_policy_loss, avg_value_loss
+    
+    print(f"訓練完了: Policy Loss: {avg_policy_loss:.6f}, Value Loss: {avg_value_loss:.6f}")
+    
+    return avg_policy_loss, avg_value_loss
+
