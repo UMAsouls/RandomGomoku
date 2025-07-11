@@ -1,0 +1,10 @@
+Training Log - 2025-07-11 12:43:58
+Model Path: models_ultralight\alpha_gomoku_5_iter2_trained_20250711_124358.pth
+Iteration: 2/2
+Initial Learning Rate: 0.010000
+Policy Loss: 0.000000
+Value Loss: 0.000000
+Replay Buffer Size: 132
+Self-Play Games: 2
+Board Size: 5
+Training Duration: 17.36 seconds

@@ -13,7 +13,7 @@ import datetime
 import matplotlib.pyplot as plt
 import concurrent.futures
 
-from ..models.dual_network import DualNetwork
+from ..network.dual_network import DualNetwork
 from ..mcts.mcts import MCTS
 from ..mcts.game_utils import (
     detect_winning_move, detect_blocking_move, augment_data, 
