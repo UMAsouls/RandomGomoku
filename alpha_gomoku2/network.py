@@ -119,6 +119,19 @@ class PolicyValueNet():
         入力: 状態のバッチ
         出力: 行動確率と状態価値のバッチ
         """
+        # リストをNumPy配列に変換
+        if isinstance(state_batch, list):
+            state_batch = np.array(state_batch)
+        
+        # 状態バッチを4次元形状に変換
+        if len(state_batch.shape) == 2:
+            # バッチサイズを推定（状態バッチの行数）
+            batch_size = state_batch.shape[0]
+            # 想定される形状: (batch_size, 4, board_size, board_size)
+            expected_size = 4 * self.board_size * self.board_size
+            if state_batch.shape[1] == expected_size:
+                state_batch = state_batch.reshape(batch_size, 4, self.board_size, self.board_size)
+        
         if self.use_gpu:
             state_batch = Variable(torch.FloatTensor(state_batch).cuda())
             log_act_probs, value = self.policy_value_net(state_batch)
@@ -154,6 +167,12 @@ class PolicyValueNet():
         return act_probs, value
     def train_step(self, state_batch, mcts_probs, winner_batch, lr):
         """学習を1ステップ実行します"""
+        # リストをNumPy配列に変換
+        if isinstance(mcts_probs, list):
+            mcts_probs = np.array(mcts_probs)
+        if isinstance(winner_batch, list):
+            winner_batch = np.array(winner_batch)
+            
         # Variableにラップ
         if self.use_gpu:
             state_batch = Variable(torch.FloatTensor(state_batch).cuda())

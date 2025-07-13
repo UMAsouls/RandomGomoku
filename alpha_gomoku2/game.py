@@ -20,7 +20,7 @@ class Game(object):
         players = {p1: player1, p2: player2}
         if is_shown:
             print(f"Game start: Player {p1} vs Player {p2}")
-            self.env.board.PrintBoard()
+            # self.env.board.PrintBoard()
         _, reward, done, _ = self.env.step(None)  # 初期化
         if done:
             if is_shown:
@@ -45,7 +45,7 @@ class Game(object):
         while True:
             move, mcts_prob = player.get_action(self.env, temp=temp, return_prob=True)
             #TODO:ボードがあっているか確認
-            print(self.env.board.GetBoardInt())
+            # print(self.env.board.GetBoardInt())
             states.append(self.env.board.GetBoardInt())
             mcts_probs.append(mcts_prob)
             current_players.append(self.env.current_player)

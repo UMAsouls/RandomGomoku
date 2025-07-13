@@ -9,6 +9,9 @@ import torch.nn.functional as F
 from network import PolicyValueNet
 from mcts import MCTSPlayer
 import random
+import matplotlib.pyplot as plt
+import os
+
 BOARD_SIZE = 8  # ボードサイズ
 N_IN_ROW = 5 # 勝利条件（連続する石の数）
 
@@ -27,12 +30,16 @@ class AlphaZero:
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
         self.date_buffer = deque(maxlen=self.buffer_size)  # 経験再生バッファ
-        self.play_batch_size = 1  # 自己対戦の並列実行数
+        self.play_batch_size = 4  # 自己対戦の並列実行数
         self.epochs = 20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
         self.check_freq = 50  # モデル評価の頻度
         self.game_batch_num = 1500  # 1回のトレーニングサイクルでプレイするゲーム数
         self.best_win_ratio = 0.0  # 最善モデルの勝率
+        
+        # Loss記録用
+        self.loss_history = []  # Loss値の履歴
+        self.entropy_history = []  # エントロピーの履歴
         
         # モデルの初期化
         # policy_value_netを初期化 (PolicyValueNetはポリシーとバリューネットワークを統合したクラスと仮定)
@@ -47,24 +54,30 @@ class AlphaZero:
         """
         extend_data = []
         for state, mcts_prob, winner in play_data:
-            # stateをNumPy配列に変換
+            # stateをNumPy配列に変換し、4次元形状に変換
             state = np.array(state)
             mcts_prob = np.array(mcts_prob)
             
-            # stateが1次元の場合、2次元に変換
+            # stateが1次元の場合、4次元形状に変換
             if len(state.shape) == 1:
-                state = state.reshape(self.board_size, self.board_size)
-            elif len(state.shape) == 3:
-                # 既に3次元の場合、最初の2次元のみを使用
-                state = state[:, :, 0] if state.shape[2] > 1 else state.reshape(self.board_size, self.board_size)
+                # (4 * board_size * board_size,) -> (4, board_size, board_size)
+                state = state.reshape(4, self.board_size, self.board_size)
+            elif len(state.shape) == 2:
+                # (board_size, board_size) -> (4, board_size, board_size) の最初のチャンネルのみ使用
+                temp_state = np.zeros((4, self.board_size, self.board_size))
+                temp_state[0] = state
+                state = temp_state
             
             # mcts_probを2次元に変換
             mcts_prob_2d = mcts_prob.reshape(self.board_size, self.board_size)
             
+            # 元のデータを追加
+            extend_data.append((state.flatten(), mcts_prob_2d.flatten(), winner))
+            
             # 回転による拡張（90度、180度、270度）
             for i in [1, 2, 3]:
-                # 状態を回転
-                equi_state = np.rot90(state, i)
+                # 各チャンネルを回転
+                equi_state = np.array([np.rot90(state[j], i) for j in range(4)])
                 # 確率分布も同じように回転
                 equi_mcts_prob = np.rot90(mcts_prob_2d, i)
                 extend_data.append((equi_state.flatten(),
@@ -72,14 +85,14 @@ class AlphaZero:
                                     winner))
                 
                 # 水平反転
-                equi_state_flip = np.fliplr(equi_state)
+                equi_state_flip = np.array([np.fliplr(equi_state[j]) for j in range(4)])
                 equi_mcts_prob_flip = np.fliplr(equi_mcts_prob)
                 extend_data.append((equi_state_flip.flatten(),
                                     equi_mcts_prob_flip.flatten(),
                                     winner))
             
             # 元の状態の水平反転のみ
-            equi_state_flip = np.fliplr(state)
+            equi_state_flip = np.array([np.fliplr(state[j]) for j in range(4)])
             equi_mcts_prob_flip = np.fliplr(mcts_prob_2d)
             extend_data.append((equi_state_flip.flatten(),
                                 equi_mcts_prob_flip.flatten(),
@@ -117,6 +130,15 @@ class AlphaZero:
         state_batch = [data[0] for data in mini_batch]
         mcts_probs_batch = [data[1] for data in mini_batch]
         winner_batch = [data[2] for data in mini_batch]
+        
+        # リストをNumPy配列に変換
+        state_batch = np.array(state_batch)
+        mcts_probs_batch = np.array(mcts_probs_batch)
+        winner_batch = np.array(winner_batch)
+        
+        # 状態バッチを4次元形状に変換
+        if len(state_batch.shape) == 2:
+            state_batch = state_batch.reshape(-1, 4, self.board_size, self.board_size)
         
         # 更新前のポリシーとバリューを取得
         old_probs, old_v = self.policy_value_net.policy_value(state_batch)
@@ -170,7 +192,41 @@ class AlphaZero:
                             explained_var_old,
                             explained_var_new))
         # 損失とエントロピーを返す
+        # Loss値を記録
+        self.loss_history.append(loss)
+        self.entropy_history.append(entropy)
+        
         return loss, entropy
+    
+    def save_loss_graph(self):
+        """
+        Loss値のグラフを保存します。
+        """
+        if len(self.loss_history) > 0:
+            plt.figure(figsize=(12, 5))
+            
+            # Loss値のグラフ
+            plt.subplot(1, 2, 1)
+            plt.plot(self.loss_history, 'b-', label='Loss')
+            plt.xlabel('Update Step')
+            plt.ylabel('Loss')
+            plt.title('Training Loss')
+            plt.legend()
+            plt.grid(True)
+            
+            # エントロピーのグラフ
+            plt.subplot(1, 2, 2)
+            plt.plot(self.entropy_history, 'r-', label='Entropy')
+            plt.xlabel('Update Step')
+            plt.ylabel('Entropy')
+            plt.title('Policy Entropy')
+            plt.legend()
+            plt.grid(True)
+            
+            plt.tight_layout()
+            plt.savefig('./loss_graph.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            print("Loss グラフを './loss_graph.png' に保存しました。")
     
     def train(self):
         """
@@ -187,13 +243,16 @@ class AlphaZero:
                 # バッファに十分なデータが溜まったらポリシーを更新する
                 if len(self.date_buffer) >= self.batch_size:
                     loss, entropy = self.policy_update()
-                
+                    self.save_loss_graph()
                 # 一定の頻度で現在のモデルを評価する
                 if (i+1) % self.check_freq == 0:
                     print(f"現在の自己対戦バッチ: {i+1}")
                     win_ratio = self.policy_evaluate()
                     # 現在のポリシーを保存
                     self.policy_value_net.save_model('./current_policy.model')
+                    
+                    # Lossグラフを保存
+                    self.save_loss_graph()
                     
                     # 新しいモデルが最善モデルを上回った場合
                     if win_ratio > self.best_win_ratio:
@@ -203,6 +262,8 @@ class AlphaZero:
                         self.policy_value_net.save_model('./best_policy.model')
         except KeyboardInterrupt:
             print('\n\rトレーニングを中断しました。')
+            # 最終的なグラフを保存
+            self.save_loss_graph()
             
     def policy_evaluate(self, n_games=10):
         """

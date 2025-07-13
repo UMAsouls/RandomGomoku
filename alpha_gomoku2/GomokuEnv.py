@@ -29,7 +29,8 @@ class GomokuEnv:
             # 無効なアクション：Noneが渡された
             reward = torch.tensor(0.0, device=self.device)
             done = True
-            board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+            board_array = self.board.GetBoardInt()
+            board_tensor = torch.tensor(board_array, dtype=torch.float32, device=self.device).unsqueeze(0)  # チャンネル次元を追加
             return board_tensor, reward, done, {"invalid_action": True}
             
         x, y = action
@@ -39,7 +40,8 @@ class GomokuEnv:
             # エラーを投げる代わりに引き分けとして扱う
             reward = torch.tensor(0.0, device=self.device)
             done = True
-            board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+            board_array = self.board.GetBoardInt()
+            board_tensor = torch.tensor(board_array, dtype=torch.float32, device=self.device).unsqueeze(0)  # チャンネル次元を追加
             return board_tensor, reward, done, {"invalid_action": True}
 
         self.lastmove = action
@@ -55,8 +57,8 @@ class GomokuEnv:
 
         # 石の数が正常かチェック
         if not (self.blackStones - self.whiteStones == 1 or self.blackStones == self.whiteStones):
-            print(self.blackStones)
-            print(self.whiteStones)
+            # print(self.blackStones)
+            # print(self.whiteStones)
             raise ValueError("石の数がおかしいです")
 
         # 報酬の初期設定
@@ -64,7 +66,7 @@ class GomokuEnv:
 
         # ゲームが終了した場合
         if done:
-            self.board.PrintBoard()
+            # self.board.PrintBoard()
             if self.current_player == self.train_player:
                 reward += 1.0  # 黒が勝った
             else:
@@ -80,7 +82,8 @@ class GomokuEnv:
 
 
         # 盤面をPyTorchテンソルに変換してGPUに転送
-        board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+        board_array = self.board.GetBoardInt()
+        board_tensor = torch.tensor(board_array, dtype=torch.float32, device=self.device).unsqueeze(0)  # チャンネル次元を追加
         return board_tensor, reward, done, {"which_player":now_player}
 
     def get_human_action(self):
