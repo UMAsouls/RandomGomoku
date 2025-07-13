@@ -15,6 +15,7 @@ class GomokuEnv:
         self.blackStones = 0
         self.whiteStones = 0
         self.device = device
+        self.lastmove = None
         if train_target == "first":
             self.train_player = 1
         elif train_target == "second":
@@ -41,6 +42,8 @@ class GomokuEnv:
             board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
             return board_tensor, reward, done, {"invalid_action": True}
 
+        self.lastmove = action
+
         if self.current_player == 1:
             self.stone = Stone.BLACK
             self.blackStones += 1
@@ -61,7 +64,7 @@ class GomokuEnv:
 
         # ゲームが終了した場合
         if done:
-            self.board.PrintBoard()
+            # self.board.PrintBoard()
             if self.current_player == self.train_player:
                 reward += 1.0  # 黒が勝った
             else:
@@ -77,7 +80,7 @@ class GomokuEnv:
 
 
         # 盤面をPyTorchテンソルに変換してGPUに転送
-        board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+        # board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
         return board_tensor, reward, done, {"which_player":now_player}
 
     def get_human_action(self):
