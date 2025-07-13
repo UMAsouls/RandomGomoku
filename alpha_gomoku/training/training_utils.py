@@ -4,6 +4,9 @@
 
 import numpy as np
 import torch
+# matplotlibバックエンドを非インタラクティブに設定（Tkinterエラーを回避）
+import matplotlib
+matplotlib.use('Agg')  # GUIを使用しないバックエンド
 import matplotlib.pyplot as plt
 from collections import deque
 

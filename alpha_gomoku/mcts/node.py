@@ -26,3 +26,12 @@ class MCTSNode:
         if self.visit_count == 0:
             return 0
         return self.win_count / self.visit_count
+
+    def update(self, value):
+        """シミュレーション結果でノードを更新"""
+        self.visit_count += 1
+        self.value_sum += value
+        
+        # 勝利数の更新（value > 0の場合を勝利とする）
+        if value > 0:
+            self.win_count += 1

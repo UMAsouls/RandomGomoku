@@ -13,6 +13,9 @@ from collections import deque
 from tqdm import tqdm
 from GomokuEnv import GomokuEnv
 import datetime  # 時間取得のためのモジュールを追加
+# matplotlibバックエンドを非インタラクティブに設定（Tkinterエラーを回避）
+import matplotlib
+matplotlib.use('Agg')  # GUIを使用しないバックエンド
 import matplotlib.pyplot as plt  # グラフ作成用にmatplotlibをインポート
 from torch.optim.lr_scheduler import StepLR, ExponentialLR  # 学習率スケジューラをインポート
 import numba
@@ -20,7 +23,7 @@ from numba import jit
 import concurrent.futures
 from functools import lru_cache
 import threading  # スレッドロック用に追加
-from alpha_gomoku.utils.game_recorder import GameRecorder
+import argparse  # コマンドライン引数のパーサーを追加
 
 # ゲーム設定
 DEFAULT_BOARD_SIZE = 8  # デフォルトのボードサイズ（標準的な五目並べ）
@@ -34,8 +37,33 @@ DEFAULT_LEARNING_RATE = 0.001  # 初期学習率（少し増加）
 # デバイスの設定
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# デバイスの設定
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def value_to_class_label(value):
+    """
+    ゲーム結果の値(-1, 0, 1)を3クラスのラベル(0, 1, 2)に変換
+    -1 (敗北) -> 0
+    0 (引き分け) -> 1  
+    1 (勝利) -> 2
+    """
+    if value < -0.5:
+        return 0  # 敗北
+    elif value > 0.5:
+        return 2  # 勝利
+    else:
+        return 1  # 引き分け
+
+def class_label_to_value(label):
+    """
+    3クラスのラベル(0, 1, 2)をゲーム結果の値(-1, 0, 1)に変換
+    0 -> -1 (敗北)
+    1 -> 0 (引き分け)
+    2 -> 1 (勝利)
+    """
+    if label == 0:
+        return -1.0
+    elif label == 2:
+        return 1.0
+    else:
+        return 0.0
 
 class DualNetwork(nn.Module):
     """方策と価値を出力するニューラルネットワーク"""
@@ -62,12 +90,14 @@ class DualNetwork(nn.Module):
         # 方策ヘッド (Kerasモデルに合わせて4フィルタの畳み込み層を使用)
         self.policy_conv = nn.Conv2d(128, 4, 1, stride=1)
         self.policy_bn = nn.BatchNorm2d(4)
-        self.policy_fc = nn.Linear(4 * board_size * board_size, board_size * board_size)        # 価値ヘッド (勝率回帰用：0から1の範囲)
+        self.policy_fc = nn.Linear(4 * board_size * board_size, board_size * board_size)
+        
+        # 価値ヘッド (回帰用：連続値出力)
         self.value_conv = nn.Conv2d(128, 2, 1, stride=1)
         self.value_bn = nn.BatchNorm2d(2)
         self.value_fc1 = nn.Linear(2 * board_size * board_size, 64)
         self.value_dropout = nn.Dropout(0.3)
-        self.value_fc2 = nn.Linear(64, 1)  # 1クラス出力（勝率のみ）
+        self.value_fc2 = nn.Linear(64, 1)  # 1次元出力に変更（回帰）
     
         # すべてのパラメータを0で初期化
         for p in self.parameters():
@@ -146,14 +176,16 @@ class DualNetwork(nn.Module):
         policy = self.relu(self.policy_bn(self.policy_conv(x)))
         policy = policy.view(-1, 4 * self.board_size * self.board_size)
         policy_logits = self.policy_fc(policy)
-        # log_softmaxは損失計算時に適用するため、ここでは生のlogitsを返す        # 価値ヘッド
+        # log_softmaxは損失計算時に適用するため、ここでは生のlogitsを返す
+        
+        # 価値ヘッド
         value = self.relu(self.value_bn(self.value_conv(x)))
         value = value.view(-1, 2 * self.board_size * self.board_size)
         value = self.relu(self.value_fc1(value))
         value = self.value_dropout(value)
-        value_output = torch.sigmoid(self.value_fc2(value))  # sigmoidで0から1の範囲に制限（勝率）
+        value_logits = self.value_fc2(value)  # 回帰用の連続値出力
         
-        return policy_logits, value_output
+        return policy_logits, value_logits
 
 class MCTSNode:
     """モンテカルロ木探索のノード"""
@@ -388,19 +420,20 @@ class MCTS:
         
         # 現在のプレイヤーを特定
         current_player = 1 if np.sum(state == 1) == np.sum(state == -1) else -1
-          # 評価関数から方策と価値を取得（キャッシュなしで直接評価）
+        
+        # 評価関数から方策と価値を取得（キャッシュなしで直接評価）
         state_tensor = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         with torch.no_grad():
             # 最後の手と現在のプレイヤー情報を渡す
-            policy_logits, value_output = self.model(state_tensor, last_move, current_player)
+            policy_logits, value_logits = self.model(state_tensor, last_move, current_player)
         
         # policy_logitsは生のlogitsなので、softmaxを適用して確率分布に変換
         policy = F.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy()
         
-        # value_outputは勝率（0から1の範囲）を直接出力
-        value = value_output.squeeze(0).item()  # [1] -> scalar
-        # 勝率を-1から1の範囲に変換（0.5を中心とした変換）
-        value = 2.0 * value - 1.0  # [0,1] -> [-1,1]
+        # value_logitsから価値を取得（回帰出力なのでtanhを適用）
+        value = torch.tanh(value_logits).squeeze().item()
+        # 現在のプレイヤーの視点から価値を調整
+        value = value * current_player
         
         policy_legal = np.zeros(self.board_size * self.board_size)
         legal_moves = self._get_legal_moves(state)
@@ -672,19 +705,21 @@ class MCTS:
             # ノードを展開
             leaf_node = search_path[-1]
             leaf_node.state = leaf_state.copy()
-              # ニューラルネットワークで評価（最後の手と現在のプレイヤー情報を渡す）
+            
+            # ニューラルネットワークで評価（最後の手と現在のプレイヤー情報を渡す）
             leaf_tensor = torch.tensor(leaf_state, dtype=torch.float32, device=device).unsqueeze(0)
             current_player = 1 if np.sum(leaf_state == 1) == np.sum(leaf_state == -1) else -1
             with torch.no_grad():
-                policy_logits, value_output = self.model(leaf_tensor, last_move, current_player)
+                policy_logits, value_logits = self.model(leaf_tensor, last_move, current_player)
             
             # policy_logitsは生のlogitsなので、softmaxを適用して確率分布に変換
             policy = F.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy()
             
-            # value_outputは勝率（0から1の範囲）を直接出力
-            value = value_output.squeeze(0).item()  # [1] -> scalar
-            # 勝率を-1から1の範囲に変換（0.5を中心とした変換）
-            value = 2.0 * value - 1.0  # [0,1] -> [-1,1]
+            # value_logitsをtanhに変換し、期待値を計算
+            value_probs = F.tanh(value_logits).squeeze(0)  # [3]
+            # 各クラス（敗北:-1, 引き分け:0, 勝利:1）の期待値を計算
+            value = -1.0 * value_probs[0] + 0.0 * value_probs[1] + 1.0 * value_probs[2]
+            value = value.item()
             
             # 合法手の取得と方策の正規化
             legal_moves = self._get_legal_moves(leaf_state)
@@ -922,13 +957,16 @@ def self_play_worker(model_path, board_size, replay_buffer, game_idx, result_que
     # 結果をキューに送信
     result_queue.put((game_idx, final_value))
 
-def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001, log_dir=None):
+def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001):
     """ニューラルネットワークの訓練 - 損失関数修正版"""
     model.train()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     
-    # 学習率スケジューラを修正（より緩やかに）
-    scheduler = StepLR(optimizer, step_size=3, gamma=0.8)
+    # AdamWオプティマイザーを使用（より安定したweight decay）
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4, 
+                           betas=(0.9, 0.999), eps=1e-8)
+    
+    # Cosine Annealing学習率スケジューラーを使用（より安定）
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr*0.1)
     
     # リプレイバッファからデータを取得
     if len(replay_buffer) < batch_size:
@@ -964,27 +1002,49 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001, log
         epoch_policy_loss = 0
         epoch_value_loss = 0
         epoch_total_loss = 0
-        batch_count = 0        
+        batch_count = 0
+        
         for batch_states, batch_policies, batch_values in dataloader:
             batch_states = batch_states.to(device)
             batch_policies = batch_policies.to(device)
             batch_values = batch_values.to(device).view(-1)  # バッチサイズに合わせて形状調整
             
-            # 価値を-1から1の範囲から0から1の範囲に変換
-            batch_values_normalized = (batch_values + 1.0) / 2.0  # [-1,1] -> [0,1]
-            
             # 予測
-            policy_logits, value_output = model(batch_states)
-            # value_outputは[batch_size, 1]の形状（勝率回帰）
+            policy_logits, value_logits = model(batch_states)
+            # value_logitsは[batch_size, 1]の形状（回帰）
             
             # AlphaZero論文に従った損失関数の実装
             # Policy Loss: クロスエントロピー損失 = -Σ(πᵢ * log(pᵢ))
-            # PyTorchのlog_softmaxを適用して、正しいクロスエントロピー損失を計算
-            log_probs = F.log_softmax(policy_logits, dim=1)
-            policy_loss = -torch.sum(batch_policies * log_probs) / batch_states.size(0)
+            # マスクを適用して不正な手への確率を0にする
+            # 有効な手のマスクを作成
+            valid_actions_mask = torch.ones_like(policy_logits, dtype=torch.bool)
+            for i, state in enumerate(batch_states):
+                # 空でないセルは無効な手とする
+                board_state = state[0] if state.dim() == 3 else state.squeeze(0)
+                invalid_positions = (board_state != 0).view(-1)
+                valid_actions_mask[i][invalid_positions] = False
             
-            # Value Loss: 平均二乗誤差損失（勝率回帰）
-            value_loss = F.mse_loss(value_output.view(-1), batch_values_normalized)
+            # マスクされた方策に対してsoftmaxを適用
+            masked_policy_logits = policy_logits.clone()
+            masked_policy_logits[~valid_actions_mask] = -float('inf')
+            policy_probs = F.softmax(masked_policy_logits, dim=1)
+            
+            # KLダイバージェンスを使用した方策損失（より安定）
+            # 小さな値を加えて数値的安定性を向上
+            epsilon = 1e-8
+            policy_probs = policy_probs + epsilon
+            batch_policies = batch_policies + epsilon
+            
+            # 正規化
+            policy_probs = policy_probs / policy_probs.sum(dim=1, keepdim=True)
+            batch_policies = batch_policies / batch_policies.sum(dim=1, keepdim=True)
+            
+            policy_loss = F.kl_div(torch.log(policy_probs), batch_policies, reduction='batchmean')
+            
+            # Value Loss: 平均二乗誤差損失（AlphaZero論文に従う）
+            # value_logitsを[-1, 1]の範囲にスケールするためtanhを適用
+            value_predictions = torch.tanh(value_logits.squeeze(-1))
+            value_loss = F.mse_loss(value_predictions, batch_values)
             
             # L2正則化項（重みパラメータのみに適用、AlphaZero論文に従う）
             l2_reg = 0
@@ -993,27 +1053,44 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001, log
                     l2_reg += torch.norm(param, p=2)
             
             # 総損失の計算（AlphaZero論文の式に従う）
-            # L = (z - v)² - π^T log p + c||θ||²
-            total_loss = value_loss + policy_loss + l2_reg_weight * l2_reg
-              # デバッグ：バッチごとの損失を出力（最初のエポックの最初の3バッチのみ）
+            # L = c1 * value_loss + c2 * policy_loss + c3 * ||θ||²
+            # 重み付けを調整（価値損失により重点を置く）
+            value_loss_weight = 1.0  # 価値損失の重み
+            policy_loss_weight = 1.0  # 方策損失の重み
+            l2_reg_weight = 1e-4  # L2正則化の重み
+            
+            total_loss = (value_loss_weight * value_loss + 
+                         policy_loss_weight * policy_loss + 
+                         l2_reg_weight * l2_reg)
+            
+            # デバッグ：バッチごとの損失を出力（最初のエポックの最初の3バッチのみ）
             if epoch == 0 and batch_count < 3:
                 print(f"Batch {batch_count}:")
                 print(f"  Policy Loss: {policy_loss.item():.6f}")
                 print(f"  Value Loss: {value_loss.item():.6f}")
                 print(f"  L2 Reg: {l2_reg.item():.6f}")
-                print(f"  Total Loss: {total_loss.item():.6f}")                
-                print(f"  Predicted values: {value_output[:5].view(-1).detach().cpu().numpy()}")
-                print(f"  Target values (normalized): {batch_values_normalized[:5].detach().cpu().numpy()}")
-                print(f"  Original target values: {batch_values[:5].detach().cpu().numpy()}")
-                print(f"  Policy log_probs sample: {log_probs[0][:10].detach().cpu().numpy()}")
+                print(f"  Total Loss: {total_loss.item():.6f}")
+                print(f"  Predicted values: {value_predictions[:5].detach().cpu().numpy()}")
+                print(f"  Target values: {batch_values[:5].detach().cpu().numpy()}")
+                print(f"  Policy probs sample: {policy_probs[0][:10].detach().cpu().numpy()}")
                 print(f"  Target policy sample: {batch_policies[0][:10].detach().cpu().numpy()}")
             
             # 勾配の計算と更新
             optimizer.zero_grad()
             total_loss.backward()
             
-            # 勾配クリッピング（勾配爆発を防ぐ）
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            # 勾配クリッピング（より適切な値に変更）
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
+            # 勾配の統計を監視（デバッグ用）
+            if epoch == 0 and batch_count < 3:
+                total_norm = 0
+                for p in model.parameters():
+                    if p.grad is not None:
+                        param_norm = p.grad.data.norm(2)
+                        total_norm += param_norm.item() ** 2
+                total_norm = total_norm ** 0.5
+                print(f"  Gradient norm: {total_norm:.6f}")
             
             optimizer.step()
             
@@ -1028,13 +1105,15 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001, log
         avg_total_loss = epoch_total_loss / len(dataloader)
         
         # 早期停止チェック（総損失で判定）
-        if avg_total_loss < best_loss:
+        # 改善の閾値を設定（わずかな改善でも継続）
+        improvement_threshold = 1e-4
+        if avg_total_loss < best_loss - improvement_threshold:
             best_loss = avg_total_loss
             patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"Early stopping at epoch {epoch+1}")
+                print(f"Early stopping at epoch {epoch+1} (best loss: {best_loss:.6f})")
                 break
         
         # エポックごとに学習率を減衰
@@ -1043,21 +1122,12 @@ def train_network(model, replay_buffer, epochs=10, batch_size=256, lr=0.001, log
         # エポックごとの損失を追加
         total_policy_loss += avg_policy_loss
         total_value_loss += avg_value_loss
-          # 現在の学習率を出力（デバッグ用）
+        
+        # 現在の学習率を出力（デバッグ用）
         current_lr = optimizer.param_groups[0]['lr']
         print(f"Epoch {epoch+1}/{epochs}, LR: {current_lr:.6f}")
         print(f"  Policy Loss: {avg_policy_loss:.6f}, Value Loss: {avg_value_loss:.6f}")
         print(f"  Total Loss: {avg_total_loss:.6f}")
-        
-        # エポック毎の詳細ログを出力
-        print(f"  Batches processed: {batch_count}")
-        print(f"  Patience counter: {patience_counter}/{patience}")
-        print(f"  Best loss so far: {best_loss:.6f}")
-        
-        # エポック毎のグラフを保存（txtファイルの代わりに）
-        if log_dir:
-            _save_epoch_graph_legacy(epoch+1, epochs, [avg_policy_loss], [avg_value_loss], 
-                                   [avg_total_loss], [current_lr], log_dir)
         
         # 損失が異常値になった場合の対処
         if np.isnan(avg_policy_loss) or np.isnan(avg_value_loss):
@@ -1114,11 +1184,9 @@ class AlphaZero:
         self.policy_loss_history = []
         self.value_loss_history = []
         # イテレーション番号を追跡するリストを追加
-        self.iterations = []        # 学習率の履歴を記録するリストを追加
+        self.iterations = []
+        # 学習率の履歴を記録するリストを追加
         self.lr_history = []
-        
-        # 棋譜記録機能
-        self.game_recorder = GameRecorder(log_dir=self.timestamp_log_dir)
         
         # 既存のモデルをロード
         if os.path.exists(self.model_path):
@@ -1156,7 +1224,8 @@ class AlphaZero:
             model_filename = f'{self.model_base_name}_{stage}_{timestamp}.pth'
             
         save_path = os.path.join(self.checkpoint_dir, model_filename)
-          # モデルの保存
+        
+        # モデルの保存
         torch.save(self.model.state_dict(), save_path)
         print(f"モデルを保存しました: {save_path}")
         
@@ -1178,8 +1247,6 @@ class AlphaZero:
             
             # イテレーション番号を追加（重複しないように一度だけ追加）
             current_iter = iteration + 1
-            # 現在のイテレーションを記録
-            self.current_iteration = current_iter
             
             # 1. 自己対戦でデータ生成（並列）
             print("自己対戦でデータを生成中...")
@@ -1190,7 +1257,7 @@ class AlphaZero:
             
             # 2. ニューラルネットワークの訓練
             print("ニューラルネットワークを訓練中...")
-            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr, log_dir=self.timestamp_log_dir)
+            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr)
             print(f"Policy Loss: {policy_loss:.4f}, Value Loss: {value_loss:.4f}")
             
             # 損失履歴に追加
@@ -1346,7 +1413,8 @@ class AlphaZero:
         # 全プロセス終了待ち
         for p in processes:
             p.join()
-          # リプレイバッファにデータを追加（バッチ処理で効率化)
+        
+        # リプレイバッファにデータを追加（バッチ処理で効率化)
         batch_size = 1000
         buffer_list = list(shared_buffer)
         for i in range(0, len(buffer_list), batch_size):
@@ -1355,10 +1423,6 @@ class AlphaZero:
                 self.replay_buffer.add(state, policy, value)
         
         print(f"リプレイバッファサイズ: {len(self.replay_buffer)}")
-        
-        # 棋譜記録機能: 1試合の棋譜を記録・保存
-        if hasattr(self, 'game_recorder') and len(buffer_list) > 0:
-            self._record_sample_game()
 
     def _self_play_process(self, model_path, board_size, shared_buffer, game_indices, result_queue):
         """自己対戦プロセス（価値計算修正版）"""
@@ -1678,56 +1742,30 @@ class AlphaZero:
             except ValueError:
                 print("数値を入力してください")
                 continue
-
-def _save_epoch_graph_legacy(current_epoch, total_epochs, policy_losses, value_losses, 
-                           total_losses, learning_rates, log_dir):
-    """エポックごとの損失をグラフで保存（legacy版）"""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # 単一のエポックのグラフを作成
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-    fig.suptitle(f'Legacy Training - Epoch {current_epoch}/{total_epochs}', fontsize=16)
-    
-    # Policy Loss
-    axes[0, 0].bar(['Policy Loss'], policy_losses, color='blue', alpha=0.7)
-    axes[0, 0].set_title('Policy Loss', fontsize=14)
-    axes[0, 0].set_ylabel('Loss')
-    axes[0, 0].grid(True, alpha=0.3)
-    
-    # Value Loss
-    axes[0, 1].bar(['Value Loss'], value_losses, color='red', alpha=0.7)
-    axes[0, 1].set_title('Value Loss', fontsize=14)
-    axes[0, 1].set_ylabel('Loss')
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Total Loss
-    axes[1, 0].bar(['Total Loss'], total_losses, color='green', alpha=0.7)
-    axes[1, 0].set_title('Total Loss', fontsize=14)
-    axes[1, 0].set_ylabel('Loss')
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # Learning Rate
-    axes[1, 1].bar(['Learning Rate'], learning_rates, color='purple', alpha=0.7)
-    axes[1, 1].set_title('Learning Rate', fontsize=14)
-    axes[1, 1].set_ylabel('Learning Rate')
-    axes[1, 1].set_yscale('log')
-    axes[1, 1].grid(True, alpha=0.3)
-    
-    # 統計情報を表示
-    stats_text = f"Epoch {current_epoch}/{total_epochs}\n"
-    stats_text += f"Policy Loss: {policy_losses[0]:.6f}\n"
-    stats_text += f"Value Loss: {value_losses[0]:.6f}\n"
-    stats_text += f"Total Loss: {total_losses[0]:.6f}\n"
-    stats_text += f"Learning Rate: {learning_rates[0]:.6f}"
-    
-    plt.figtext(0.02, 0.02, stats_text, fontsize=10, 
-               bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.5))
-    
-    plt.tight_layout()
-    
-    # ファイル名を作成して保存
-    plot_filename = os.path.join(log_dir, f'legacy_epoch_{current_epoch}_{timestamp}.png')
-    plt.savefig(plot_filename, dpi=150, bbox_inches='tight')
-    plt.close()
-    
-    print(f"  Legacy epoch graph saved: {plot_filename}")
+    def _evaluate_neighbors(self, state, x, y, player):
+        """候補手の周囲の石の配置に基づいて評価値を計算する高速な関数"""
+        score = 0
+        directions = [(1, 0
+                       ), (0, 1), (1, 1), (1, -1)]  # 横、縦、右下がり斜め、右上がり斜め
+        
+        # 周辺の自分の石と相手の石を評価
+        for d in range(1, 3):  # 1~2マス範囲をチェック
+            for dx, dy in directions:
+                # 正方向
+                nx, ny = x + d*dx, y + d*dy
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
+                    if state[ny][nx] == player:  # 自分の石
+                        score += 1.0 / (d + 1)   # 近いほど高スコア
+                    elif state[ny][nx] == -player:  # 相手の石
+                        score += 0.5 / (d + 1)   # 相手の石に対しても少しスコアを与える（ブロック価値）
+                
+                # 逆方向
+                nx, ny = x - d*dx, y - d*dy
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
+                    if state[ny][nx] == player:  # 自分の石
+                        score += 1.0 / (d + 1)
+                    elif state[ny][nx] == -player:  # 相手の石
+                        score += 0.5 / (d + 1)
+        
+        return score

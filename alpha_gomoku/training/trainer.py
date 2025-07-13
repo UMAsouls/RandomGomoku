@@ -10,6 +10,9 @@ import torch
 import torch.multiprocessing as mp
 from tqdm import tqdm
 import datetime
+# matplotlibバックエンドを非インタラクティブに設定（Tkinterエラーを回避）
+import matplotlib
+matplotlib.use('Agg')  # GUIを使用しないバックエンド
 import matplotlib.pyplot as plt
 import concurrent.futures
 
@@ -151,7 +154,20 @@ class AlphaZero:
             # 適応的学習率を取得
             current_lr = self.adaptive_lr.get_lr()
             
-            policy_loss, value_loss = train_network(self.model, self.replay_buffer, lr=current_lr, log_dir=self.timestamp_log_dir)
+            result = train_network(self.model, self.replay_buffer, lr=current_lr, log_dir=self.timestamp_log_dir)
+            if len(result) == 3:
+                policy_loss, value_loss, epoch_data = result
+                # epochデータを保存（最終グラフ用）
+                if hasattr(self, 'all_epoch_data'):
+                    self.all_epoch_data['policy_losses'].extend(epoch_data['policy_losses'])
+                    self.all_epoch_data['value_losses'].extend(epoch_data['value_losses'])
+                    self.all_epoch_data['total_losses'].extend(epoch_data['total_losses'])
+                    self.all_epoch_data['learning_rates'].extend(epoch_data['learning_rates'])
+                else:
+                    self.all_epoch_data = epoch_data
+            else:
+                policy_loss, value_loss = result
+                
             print(f"Policy Loss: {policy_loss:.4f}, Value Loss: {value_loss:.4f}")
             
             # 学習率の調整（適応的）
@@ -192,6 +208,17 @@ class AlphaZero:
             self.save_model("trained", iteration+1)
               # 安定化されたグラフを保存
             self._plot_stable_loss_history(iteration=current_iter)
+            
+            # 最終エポックグラフを保存
+            if hasattr(self, 'all_epoch_data') and self.all_epoch_data:
+                from .train_network import save_final_training_graph
+                save_final_training_graph(
+                    self.all_epoch_data['policy_losses'],
+                    self.all_epoch_data['value_losses'],
+                    self.all_epoch_data['total_losses'],
+                    self.all_epoch_data['learning_rates'],
+                    self.timestamp_log_dir
+                )
             
             # 3. ログファイルに保存
             self._save_training_log(iteration+1, current_lr, policy_loss, value_loss, start_time)
