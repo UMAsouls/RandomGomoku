@@ -44,6 +44,14 @@ class Game(object):
         states, mcts_probs, current_players = [], [], []
         while True:
             move, mcts_prob = player.get_action(self.env, temp=temp, return_prob=True)
+            
+            # ボードが満杯で有効な手がない場合の処理
+            if move is None:
+                # 引き分け処理
+                winners_z = np.zeros(len(current_players))
+                player.reset_player()
+                return winners_z, zip(states, mcts_probs, winners_z)
+            
             #TODO:ボードがあっているか確認
             # print(self.env.board.GetBoardInt())
             states.append(self.env.board.GetBoardInt())

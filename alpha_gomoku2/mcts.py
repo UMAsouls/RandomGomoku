@@ -3,10 +3,28 @@ import copy
 import torch
 from GomokuEnv import GomokuEnv
 from RandomGomoku.Board import Board
+from concurrent.futures import ThreadPoolExecutor
+import multiprocessing
+
 def softmax(x):
     probs = np.exp(x - np.max(x))
     probs /= np.sum(probs)
     return probs
+
+def parallel_playout(args):
+    """並列でプレイアウトを実行"""
+    env, policy_fn, c_puct, n_playout_per_thread = args
+    
+    # 各スレッド用のMCTSインスタンスを作成
+    mcts = MCTS(policy_fn, c_puct, n_playout_per_thread)
+    
+    # プレイアウトを実行
+    for _ in range(n_playout_per_thread):
+        env_copy = copy.deepcopy(env)
+        mcts._playout(env_copy)
+    
+    # 結果を返す
+    return mcts._root._children
 
 class TreeNode(object):
     def __init__(self, parent, prior_p):
@@ -95,6 +113,10 @@ class MCTS(object):
         self._policy = policy_value_fn
         self._c_puct = c_puct
         self._n_playout = n_playout
+        
+        # 並列処理のためのパラメータ
+        self.num_threads = min(4, multiprocessing.cpu_count())  # CPU並列数を制限
+        self.use_parallel = True  # 並列処理を使用するかどうか
     def _playout(self, env:GomokuEnv):
         """Run a single playout from the root to the leaf, getting a value at
         the leaf and propagating it back through its parents.
@@ -135,17 +157,84 @@ class MCTS(object):
         env: the Gomoku environment to play in.
         Return: a list of (action, probability) tuples.
         """
-        for _ in range(self._n_playout):
-            # Copy the environment to avoid modifying the original state.
-            env_copy = copy.deepcopy(env)
-            self._playout(env_copy)
+        if self.use_parallel and self.num_threads > 1:
+            # 並列でプレイアウトを実行
+            n_playout_per_thread = self._n_playout // self.num_threads
+            
+            # 各スレッドのタスクを準備
+            tasks = []
+            for _ in range(self.num_threads):
+                tasks.append((env, self._policy, self._c_puct, n_playout_per_thread))
+            
+            # 並列実行
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                results = list(executor.map(parallel_playout, tasks))
+            
+            # 結果を統合
+            all_actions = set()
+            for result in results:
+                all_actions.update(result.keys())
+            
+            # 各アクションの統計を集計
+            combined_stats = {}
+            for action in all_actions:
+                total_visits = 0
+                total_value = 0
+                for result in results:
+                    if action in result:
+                        node = result[action]
+                        total_visits += node._n_visits
+                        total_value += node._Q * node._n_visits
+                
+                if total_visits > 0:
+                    combined_stats[action] = total_value / total_visits
+                else:
+                    combined_stats[action] = 0
+            
+            # 統計を元にツリーを更新
+            for action, avg_value in combined_stats.items():
+                if action not in self._root._children:
+                    self._root._children[action] = TreeNode(self._root, 0.1)
+                
+                # 統計を更新
+                self._root._children[action]._n_visits = sum(
+                    result[action]._n_visits for result in results if action in result
+                )
+                self._root._children[action]._Q = avg_value
+            
+        else:
+            # 通常のシーケンシャル実行
+            for _ in range(self._n_playout):
+                # Copy the environment to avoid modifying the original state.
+                env_copy = copy.deepcopy(env)
+                self._playout(env_copy)
         
         # Get the visit counts for each action from the root node.
         act_visits = [(act, node._n_visits) for act, node in self._root._children.items()]
-        acts, visits = zip(*act_visits)
-        act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
+        if not act_visits:
+            # 子ノードがない場合は、有効な手をランダムに選ぶ
+            sensible_moves = self.get_legal_positions(env.board_size, env.board)
+            if sensible_moves:
+                acts = sensible_moves
+                act_probs = np.ones(len(acts)) / len(acts)
+            else:
+                acts = [0]
+                act_probs = np.array([1.0])
+        else:
+            acts, visits = zip(*act_visits)
+            act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
         
         return acts, act_probs
+    
+    def get_legal_positions(self, board_size, board: Board):
+        """有効な手の位置を取得"""
+        state = board.GetBoardInt()
+        legal_positions = []
+        for y in range(board_size):
+            for x in range(board_size):
+                if state[y][x] == 0:
+                    legal_positions.append(x + y * board_size)
+        return legal_positions
     
     def update_with_move(self, last_move):
         """Step forward in the tree, keeping everything we already know
@@ -222,6 +311,11 @@ class MCTSPlayer(object):
                 return move
         else:
             print("WARNING: the board is full")
+            # ボードが満杯の場合は適切な値を返す
+            if return_prob:
+                return None, move_probs
+            else:
+                return None
 
     def __str__(self):
         return "MCTS {}".format(self.player)

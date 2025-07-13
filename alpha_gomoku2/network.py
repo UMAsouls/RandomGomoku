@@ -6,6 +6,9 @@ from torch.autograd import Variable
 import numpy as np
 from GomokuEnv import GomokuEnv
 from RandomGomoku.Board import Board
+import threading
+import concurrent.futures
+from torch.utils.data import DataLoader, TensorDataset
 
 def set_learning_rate(optimizer, lr):
     """指定された値に学習率を設定します"""
@@ -56,6 +59,12 @@ class PolicyValueNet():
         self.board_size = board_size
         self.l2_const = 1e-4  # L2ペナルティの係数
         self.env = env
+        
+        # CPUワーカーの数を設定
+        self.num_cpu_workers = 4
+        # CPU処理用のThreadPoolExecutor
+        self.cpu_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.num_cpu_workers)
+        
         # ポリシー・バリューネットワークモジュール
         if self.use_gpu:
             self.policy_value_net = Net(board_size, board_size).cuda()
@@ -67,142 +76,201 @@ class PolicyValueNet():
 
         if model_file:
             self.load_model(model_file)
-    def get_legal_positions(self, board: Board):
-        #形式: 整数のリスト（例：[0, 1, 2, 5, 7, 10, ...]）
-        # 意味: 各整数は盤面上の空いているマス目の位置を1次元のインデックスで表現
-        # 範囲: 0 ～ (board_size × board_size - 1)
+    
+    def __del__(self):
+        """デストラクタでスレッドプールを終了"""
+        if hasattr(self, 'cpu_executor'):
+            self.cpu_executor.shutdown(wait=True)
+    
+    def _preprocess_board_cpu(self, board: Board):
+        """CPUでボードの前処理を行う"""
+        board_state = board.GetBoardInt()
+        current_player = self.env.current_player
+        last_move = self.env.lastmove
+
+        # 4つの特徴平面を準備
+        square_state = np.zeros((4, self.board_size, self.board_size))
+
+        # 0: 現在のプレイヤーの石, 1: 相手プレイヤーの石
+        square_state[0] = (board_state == current_player)
+        square_state[1] = (board_state == (3 - current_player))
+
+        # 2: 最後の着手
+        if last_move is not None:
+            y, x = last_move
+            square_state[2, y, x] = 1.0
+        
+        # 3: 手番の色
+        if current_player == 1:
+            square_state[3] = 1.0
+        
+        return square_state
+    
+    def _get_legal_positions_cpu(self, board: Board):
+        """CPUで合法手を取得"""
         state = board.GetBoardInt()
         legal_positions = []
         for y in range(self.board_size):
             for x in range(self.board_size):
                 if state[y][x] == 0:
                     legal_positions.append(x+ y * self.board_size)
-        # print(f"有効な手の数: {len(legal_positions)}")
-        # print(f"有効な手の位置: {legal_positions}")
         return legal_positions
+
+    def get_legal_positions(self, board: Board):
+        """合法手を取得（CPUで実行）"""
+        return self._get_legal_positions_cpu(board)
     
     def _board_to_state_input(self, board: Board):
-        """
-        盤面の状態をネットワークの入力形式に変換します。
-        入力: Boardオブジェクト
-        出力: 4x(盤面サイズ)x(盤面サイズ) のnumpy配列
-        """
-        board_state = board.GetBoardInt()
-        current_player = self.env.current_player
-        last_move = self.env.lastmove
-
-        # 4つの特徴平面を準備
-        # 0: 現在のプレイヤーの石
-        # 1: 相手プレイヤーの石
-        # 2: 最後の着手
-        # 3: 手番の色
-        square_state = np.zeros((4, self.board_size, self.board_size))
-
-        # 0: 現在のプレイヤーの石, 1: 相手プレイヤーの石
-        square_state[0] = (board_state == current_player)
-        square_state[1] = (board_state == (3 - current_player)) # 相手プレイヤー (1 -> 2, 2 -> 1)
-
-        # 2: 最後の着手
-        if last_move is not None:
-            y, x = last_move
-            print(f"最後の着手: ({x}, {y})")
-            square_state[2, y, x] = 1.0
-        
-        # 3: 手番の色 (黒番なら全面1.0)
-        if current_player == 1: # 黒番
-            square_state[3] = 1.0
-        
-        return square_state
+        """CPUで盤面の状態をネットワークの入力形式に変換"""
+        return self._preprocess_board_cpu(board)
 
     def policy_value(self, state_batch):
         """
         入力: 状態のバッチ
         出力: 行動確率と状態価値のバッチ
         """
-        # リストをNumPy配列に変換
+        # CPUでデータ前処理
         if isinstance(state_batch, list):
             state_batch = np.array(state_batch)
         
-        # 状態バッチを4次元形状に変換
+        # 状態バッチを4次元形状に変換（CPUで実行）
         if len(state_batch.shape) == 2:
-            # バッチサイズを推定（状態バッチの行数）
             batch_size = state_batch.shape[0]
-            # 想定される形状: (batch_size, 4, board_size, board_size)
             expected_size = 4 * self.board_size * self.board_size
             if state_batch.shape[1] == expected_size:
                 state_batch = state_batch.reshape(batch_size, 4, self.board_size, self.board_size)
         
-        if self.use_gpu:
-            state_batch = Variable(torch.FloatTensor(state_batch).cuda())
-            log_act_probs, value = self.policy_value_net(state_batch)
-            act_probs = np.exp(log_act_probs.data.cpu().numpy())
-            return act_probs, value.data.cpu().numpy()
-        else:
-            state_batch = Variable(torch.FloatTensor(state_batch))
-            log_act_probs, value = self.policy_value_net(state_batch)
-            act_probs = np.exp(log_act_probs.data.numpy())
-            return act_probs, value.data.numpy()
+        # DataLoaderを使用してバッチ処理を効率化
+        dataset = TensorDataset(torch.FloatTensor(state_batch))
+        dataloader = DataLoader(dataset, batch_size=min(64, len(state_batch)), shuffle=False)
+        
+        all_act_probs = []
+        all_values = []
+        
+        # バッチごとに処理
+        for batch_data in dataloader:
+            batch_tensor = batch_data[0]
+            
+            if self.use_gpu:
+                batch_tensor = Variable(batch_tensor.cuda())
+            else:
+                batch_tensor = Variable(batch_tensor)
+            
+            # GPU推論
+            with torch.no_grad():
+                log_act_probs, value = self.policy_value_net(batch_tensor)
+            
+            # CPUで後処理
+            if self.use_gpu:
+                act_probs = np.exp(log_act_probs.cpu().numpy())
+                value_np = value.cpu().numpy()
+            else:
+                act_probs = np.exp(log_act_probs.numpy())
+                value_np = value.numpy()
+            
+            all_act_probs.append(act_probs)
+            all_values.append(value_np)
+        
+        # 結果を結合
+        final_act_probs = np.concatenate(all_act_probs, axis=0)
+        final_values = np.concatenate(all_values, axis=0)
+        
+        return final_act_probs, final_values
     def policy_value_fn(self,board:Board):
         """
         入力: 盤面の状態
         出力: (行動, 確率) のタプルのリストと盤面の評価値
         """
-        # stateから0の部分だけを抽出
-        legal_positions = self.get_legal_positions(board)
-        current_state = self._board_to_state_input(board)
+        # CPUで前処理を並列実行
+        future_legal = self.cpu_executor.submit(self._get_legal_positions_cpu, board)
+        future_state = self.cpu_executor.submit(self._preprocess_board_cpu, board)
+        
+        # 並列処理の結果を取得
+        legal_positions = future_legal.result()
+        current_state = future_state.result()
+        
+        # GPU推論用にデータを準備
         current_state = np.ascontiguousarray(current_state.reshape(
                 -1, 4, self.board_size, self.board_size))
         
         if self.use_gpu:
-                log_act_probs, value = self.policy_value_net(
-                        Variable(torch.from_numpy(current_state)).cuda().float())
-                act_probs = np.exp(log_act_probs.data.cpu().numpy().flatten())
-                value = value.data.cpu().numpy()[0][0]
+            state_tensor = Variable(torch.from_numpy(current_state).cuda().float())
         else:
-            log_act_probs, value = self.policy_value_net(
-                    Variable(torch.from_numpy(current_state)).float())
-            act_probs = np.exp(log_act_probs.data.numpy().flatten())
-            value = value.data.numpy()[0][0]
+            state_tensor = Variable(torch.from_numpy(current_state).float())
+        
+        # GPU推論
+        with torch.no_grad():
+            log_act_probs, value = self.policy_value_net(state_tensor)
+        
+        # CPUで後処理
+        if self.use_gpu:
+            act_probs = np.exp(log_act_probs.cpu().numpy().flatten())
+            value = value.cpu().numpy()[0][0]
+        else:
+            act_probs = np.exp(log_act_probs.numpy().flatten())
+            value = value.numpy()[0][0]
+        
         act_probs = zip(legal_positions, act_probs[legal_positions])
         return act_probs, value
     def train_step(self, state_batch, mcts_probs, winner_batch, lr):
         """学習を1ステップ実行します"""
-        # リストをNumPy配列に変換
+        # CPUでデータ前処理
         if isinstance(mcts_probs, list):
             mcts_probs = np.array(mcts_probs)
         if isinstance(winner_batch, list):
             winner_batch = np.array(winner_batch)
-            
-        # Variableにラップ
-        if self.use_gpu:
-            state_batch = Variable(torch.FloatTensor(state_batch).cuda())
-            mcts_probs = Variable(torch.FloatTensor(mcts_probs).cuda())
-            winner_batch = Variable(torch.FloatTensor(winner_batch).cuda())
-        else:
-            state_batch = Variable(torch.FloatTensor(state_batch))
-            mcts_probs = Variable(torch.FloatTensor(mcts_probs))
-            winner_batch = Variable(torch.FloatTensor(winner_batch))
-
+        
+        # DataLoaderを使用してバッチ処理を効率化
+        dataset = TensorDataset(
+            torch.FloatTensor(state_batch),
+            torch.FloatTensor(mcts_probs),
+            torch.FloatTensor(winner_batch)
+        )
+        dataloader = DataLoader(dataset, batch_size=min(128, len(state_batch)), shuffle=True)
+        
         # パラメータの勾配をゼロに設定
         self.optimizer.zero_grad()
         # 学習率を設定
         set_learning_rate(self.optimizer, lr)
+        
+        total_loss = 0
+        total_entropy = 0
+        num_batches = 0
+        
+        for batch_states, batch_mcts_probs, batch_winners in dataloader:
+            # GPU転送
+            if self.use_gpu:
+                batch_states = Variable(batch_states.cuda())
+                batch_mcts_probs = Variable(batch_mcts_probs.cuda())
+                batch_winners = Variable(batch_winners.cuda())
+            else:
+                batch_states = Variable(batch_states)
+                batch_mcts_probs = Variable(batch_mcts_probs)
+                batch_winners = Variable(batch_winners)
 
-        # 順伝播
-        log_act_probs, value = self.policy_value_net(state_batch)
-        # 損失関数を定義: loss = (z - v)^2 - pi^T * log(p) + c||theta||^2
-        # L2ペナルティはオプティマイザに組み込まれていることに注意
-        value_loss = F.mse_loss(value.view(-1), winner_batch)
-        policy_loss = -torch.mean(torch.sum(mcts_probs*log_act_probs, 1))
-        loss = value_loss + policy_loss
-        # 逆伝播と最適化
-        loss.backward()
+            # 順伝播
+            log_act_probs, value = self.policy_value_net(batch_states)
+            # 損失関数を計算
+            value_loss = F.mse_loss(value.view(-1), batch_winners)
+            policy_loss = -torch.mean(torch.sum(batch_mcts_probs*log_act_probs, 1))
+            loss = value_loss + policy_loss
+            
+            # 逆伝播
+            loss.backward()
+            
+            # ポリシーエントロピーを計算
+            entropy = -torch.mean(
+                    torch.sum(torch.exp(log_act_probs) * log_act_probs, 1)
+                    )
+            
+            total_loss += loss.item()
+            total_entropy += entropy.item()
+            num_batches += 1
+        
+        # 最適化ステップ
         self.optimizer.step()
-        # ポリシーエントロピーを計算（モニタリング用）
-        entropy = -torch.mean(
-                torch.sum(torch.exp(log_act_probs) * log_act_probs, 1)
-                )
-        return loss.item(), entropy.item()
+        
+        return total_loss / num_batches, total_entropy / num_batches
         
     def get_policy_param(self):
         """ネットワークのパラメータを取得します"""

@@ -7,13 +7,76 @@ from collections import deque
 import random
 import torch.nn.functional as F
 from network import PolicyValueNet
+import os
+import matplotlib
+matplotlib.use('Agg')  # バックエンドを非インタラクティブなものに変更
+import matplotlib.pyplot as plt
+from mcts import MCTSPlayer
+from game import Game
+import torch
+from collections import deque
+import random
+import torch.nn.functional as F
+from network import PolicyValueNet
 from mcts import MCTSPlayer
 import random
 import matplotlib.pyplot as plt
 import os
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+import threading
 
 BOARD_SIZE = 8  # ボードサイズ
 N_IN_ROW = 5 # 勝利条件（連続する石の数）
+
+def parallel_data_augmentation(args):
+    """データ拡張を並列で実行するための関数"""
+    state, mcts_prob, winner, board_size = args
+    extend_data = []
+    
+    # stateをNumPy配列に変換し、4次元形状に変換
+    state = np.array(state)
+    mcts_prob = np.array(mcts_prob)
+    
+    # stateが1次元の場合、4次元形状に変換
+    if len(state.shape) == 1:
+        state = state.reshape(4, board_size, board_size)
+    elif len(state.shape) == 2:
+        temp_state = np.zeros((4, board_size, board_size))
+        temp_state[0] = state
+        state = temp_state
+    
+    # mcts_probを2次元に変換
+    mcts_prob_2d = mcts_prob.reshape(board_size, board_size)
+    
+    # 元のデータを追加
+    extend_data.append((state.flatten(), mcts_prob_2d.flatten(), winner))
+    
+    # 回転による拡張（90度、180度、270度）
+    for i in [1, 2, 3]:
+        # 各チャンネルを回転
+        equi_state = np.array([np.rot90(state[j], i) for j in range(4)])
+        # 確率分布も同じように回転
+        equi_mcts_prob = np.rot90(mcts_prob_2d, i)
+        extend_data.append((equi_state.flatten(),
+                            equi_mcts_prob.flatten(),
+                            winner))
+                            
+        # 水平反転
+        equi_state_flip = np.array([np.fliplr(equi_state[j]) for j in range(4)])
+        equi_mcts_prob_flip = np.fliplr(equi_mcts_prob)
+        extend_data.append((equi_state_flip.flatten(),
+                            equi_mcts_prob_flip.flatten(),
+                            winner))
+    
+    # 元の状態の水平反転のみ
+    equi_state_flip = np.array([np.fliplr(state[j]) for j in range(4)])
+    equi_mcts_prob_flip = np.fliplr(mcts_prob_2d)
+    extend_data.append((equi_state_flip.flatten(),
+                        equi_mcts_prob_flip.flatten(),
+                        winner))
+    
+    return extend_data
 
 class AlphaZero:
     def __init__(self):
@@ -30,16 +93,20 @@ class AlphaZero:
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
         self.date_buffer = deque(maxlen=self.buffer_size)  # 経験再生バッファ
-        self.play_batch_size = 4  # 自己対戦の並列実行数
+        self.play_batch_size = 1  # 自己対戦の並列実行数
         self.epochs = 20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
         self.check_freq = 50  # モデル評価の頻度
-        self.game_batch_num = 1500  # 1回のトレーニングサイクルでプレイするゲーム数
+        self.game_batch_num = 5000  # 1回のトレーニングサイクルでプレイするゲーム数
         self.best_win_ratio = 0.0  # 最善モデルの勝率
         
         # Loss記録用
         self.loss_history = []  # Loss値の履歴
         self.entropy_history = []  # エントロピーの履歴
+        
+        # 並列処理用
+        self.num_cpu_workers = multiprocessing.cpu_count() - 1  # CPU並列数
+        self.data_augmentation_executor = ThreadPoolExecutor(max_workers=self.num_cpu_workers)
         
         # モデルの初期化
         # policy_value_netを初期化 (PolicyValueNetはポリシーとバリューネットワークを統合したクラスと仮定)
@@ -47,56 +114,41 @@ class AlphaZero:
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                        c_puct=self.c_puct, n_playout=self.n_playout,
                                        is_selfplay=True)
+        
+        # GPU使用率を制限するための設定
+        if torch.cuda.is_available():
+            # GPUメモリの使用量を制限
+            torch.cuda.set_per_process_memory_fraction(0.8)  # 80%に制限
+            torch.cuda.empty_cache()
+            
+            # GPU計算のバッチサイズを動的に調整
+            self.gpu_batch_size = 32  # GPUでの推論バッチサイズを小さくする
+            print(f"GPU使用率を80%に制限しました")
+        else:
+            self.gpu_batch_size = 64
+    
+    def __del__(self):
+        """デストラクタでスレッドプールを終了"""
+        if hasattr(self, 'data_augmentation_executor'):
+            self.data_augmentation_executor.shutdown(wait=True)
     def get_equi_data(self, play_data):
         """
         収集したセルフプレイデータを回転や反転によって拡張します。
         これにより、モデルの汎用性を向上させます。
+        CPUで並列実行します。
         """
-        extend_data = []
+        # 並列処理のためのタスクを準備
+        tasks = []
         for state, mcts_prob, winner in play_data:
-            # stateをNumPy配列に変換し、4次元形状に変換
-            state = np.array(state)
-            mcts_prob = np.array(mcts_prob)
+            tasks.append((state, mcts_prob, winner, self.board_size))
+        
+        # CPUで並列実行
+        extend_data = []
+        with ThreadPoolExecutor(max_workers=self.num_cpu_workers) as executor:
+            futures = [executor.submit(parallel_data_augmentation, task) for task in tasks]
             
-            # stateが1次元の場合、4次元形状に変換
-            if len(state.shape) == 1:
-                # (4 * board_size * board_size,) -> (4, board_size, board_size)
-                state = state.reshape(4, self.board_size, self.board_size)
-            elif len(state.shape) == 2:
-                # (board_size, board_size) -> (4, board_size, board_size) の最初のチャンネルのみ使用
-                temp_state = np.zeros((4, self.board_size, self.board_size))
-                temp_state[0] = state
-                state = temp_state
-            
-            # mcts_probを2次元に変換
-            mcts_prob_2d = mcts_prob.reshape(self.board_size, self.board_size)
-            
-            # 元のデータを追加
-            extend_data.append((state.flatten(), mcts_prob_2d.flatten(), winner))
-            
-            # 回転による拡張（90度、180度、270度）
-            for i in [1, 2, 3]:
-                # 各チャンネルを回転
-                equi_state = np.array([np.rot90(state[j], i) for j in range(4)])
-                # 確率分布も同じように回転
-                equi_mcts_prob = np.rot90(mcts_prob_2d, i)
-                extend_data.append((equi_state.flatten(),
-                                    equi_mcts_prob.flatten(),
-                                    winner))
-                
-                # 水平反転
-                equi_state_flip = np.array([np.fliplr(equi_state[j]) for j in range(4)])
-                equi_mcts_prob_flip = np.fliplr(equi_mcts_prob)
-                extend_data.append((equi_state_flip.flatten(),
-                                    equi_mcts_prob_flip.flatten(),
-                                    winner))
-            
-            # 元の状態の水平反転のみ
-            equi_state_flip = np.array([np.fliplr(state[j]) for j in range(4)])
-            equi_mcts_prob_flip = np.fliplr(mcts_prob_2d)
-            extend_data.append((equi_state_flip.flatten(),
-                                equi_mcts_prob_flip.flatten(),
-                                winner))
+            for future in as_completed(futures):
+                extend_data.extend(future.result())
         
         return extend_data
     # セルフプレイデータを収集するメソッド
@@ -117,24 +169,41 @@ class AlphaZero:
     def policy_update(self):
         """
         収集したデータからミニバッチを作成し、ポリシーとバリューネットワークを更新します。
-        ミニバッチ：経験再生バッファからランダムに抽出されたデータの一部。
-                    一度に全てのデータを使うのではなく、バッチ単位で学習することで、
-                    計算効率を高め、学習を安定させます。
-        KLダイバージェンス：2つの確率分布の差異を測る指標。
-                         ここでは、更新前後のポリシーの出力（着手確率）の差を測ります。
-                         この値が大きくなりすぎないように学習率を動的に調整し、
-                         ポリシーが急激に変化して学習が不安定になるのを防ぎます。
         """
-        # 経験再生バッファからミニバッチをサンプリング
+        # 経験再生バッファからミニバッチをサンプリング（CPUで実行）
         mini_batch = random.sample(self.date_buffer, self.batch_size)
-        state_batch = [data[0] for data in mini_batch]
-        mcts_probs_batch = [data[1] for data in mini_batch]
-        winner_batch = [data[2] for data in mini_batch]
         
-        # リストをNumPy配列に変換
-        state_batch = np.array(state_batch)
-        mcts_probs_batch = np.array(mcts_probs_batch)
-        winner_batch = np.array(winner_batch)
+        # CPUで並列処理でデータを準備
+        with ThreadPoolExecutor(max_workers=self.num_cpu_workers) as executor:
+            # バッチデータを並列で処理
+            futures = []
+            batch_size_per_thread = len(mini_batch) // self.num_cpu_workers
+            
+            for i in range(self.num_cpu_workers):
+                start_idx = i * batch_size_per_thread
+                if i == self.num_cpu_workers - 1:
+                    end_idx = len(mini_batch)
+                else:
+                    end_idx = (i + 1) * batch_size_per_thread
+                
+                thread_batch = mini_batch[start_idx:end_idx]
+                futures.append(executor.submit(self._prepare_batch_data, thread_batch))
+            
+            # 結果を結合
+            all_states = []
+            all_mcts_probs = []
+            all_winners = []
+            
+            for future in as_completed(futures):
+                states, mcts_probs, winners = future.result()
+                all_states.extend(states)
+                all_mcts_probs.extend(mcts_probs)
+                all_winners.extend(winners)
+        
+        # NumPy配列に変換
+        state_batch = np.array(all_states)
+        mcts_probs_batch = np.array(all_mcts_probs)
+        winner_batch = np.array(all_winners)
         
         # 状態バッチを4次元形状に変換
         if len(state_batch.shape) == 2:
@@ -155,7 +224,7 @@ class AlphaZero:
             # 更新後のポリシーとバリューを取得
             new_probs, new_v = self.policy_value_net.policy_value(state_batch)
             
-            # 更新前後のポリシーのKLダイバージェンスを計算
+            # 更新前後のポリシーのKLダイバージェンスを計算（CPUで実行）
             kl = np.mean(np.sum(old_probs * (
                     np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)),
                     axis=1)
@@ -170,13 +239,19 @@ class AlphaZero:
             elif kl < self.kl_targ / 2 and self.lr_multiplier < 10:
                 self.lr_multiplier *= 1.5
             
-            # 学習の進捗を評価するための指標を計算
-            explained_var_old = (1 -
-                         np.var(np.array(winner_batch) - old_v.flatten()) /
-                         np.var(np.array(winner_batch)))
-            explained_var_new = (1 -
-                                np.var(np.array(winner_batch) - new_v.flatten()) /
-                                np.var(np.array(winner_batch)))
+            # 学習の進捗を評価するための指標を計算（CPUで実行）
+            # 0による除算を防ぐために分母をチェック
+            winner_var = np.var(np.array(winner_batch))
+            if winner_var > 1e-8:  # 分母が0に近くないことを確認
+                explained_var_old = (1 -
+                             np.var(np.array(winner_batch) - old_v.flatten()) /
+                             winner_var)
+                explained_var_new = (1 -
+                                    np.var(np.array(winner_batch) - new_v.flatten()) /
+                                    winner_var)
+            else:
+                explained_var_old = 0.0
+                explained_var_new = 0.0
             
             # 学習状況を出力
             print(("kl:{:.5f},"
@@ -197,6 +272,13 @@ class AlphaZero:
         self.entropy_history.append(entropy)
         
         return loss, entropy
+    
+    def _prepare_batch_data(self, batch):
+        """バッチデータを準備する（CPUで実行）"""
+        states = [data[0] for data in batch]
+        mcts_probs = [data[1] for data in batch]
+        winners = [data[2] for data in batch]
+        return states, mcts_probs, winners
     
     def save_loss_graph(self):
         """
