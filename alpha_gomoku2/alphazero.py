@@ -1,11 +1,13 @@
 import numpy as np
 from GomokuEnv import GomokuEnv
+from game import Game
 import torch
 from collections import deque
 import random
 import torch.nn.functional as F
 from network import PolicyValueNet
 from mcts import MCTSPlayer
+import random
 BOARD_SIZE = 8  # ボードサイズ
 N_IN_ROW = 5 # 勝利条件（連続する石の数）
 
@@ -13,6 +15,7 @@ class AlphaZero:
     def __init__(self):
         self.board_size = BOARD_SIZE
         self.env = GomokuEnv(board_size=BOARD_SIZE)
+        self.game = Game(self.env, board_size=BOARD_SIZE)
         self.n_in_row = N_IN_ROW
         # トレーニング用パラメータ
         self.learn_rate = 2e-3  # 学習率
@@ -65,7 +68,7 @@ class AlphaZero:
         収集したデータは、回転や反転によって拡張（オーグメンテーション）されます。
         """
         for i in range(num_games):
-                winner, play_data = self.env.start_self_play(self.mcts_player,
+                winner, play_data = self.game.start_self_play(self.mcts_player,
                                                             temp=self.temp)
                 play_data = list(play_data)[:]
                 self.episode_len = len(play_data)
@@ -176,7 +179,54 @@ class AlphaZero:
         except KeyboardInterrupt:
             print('\n\rトレーニングを中断しました。')
             
+    def policy_evaluate(self, n_games=10):
+        """
+        現在のポリシーと最善のポリシーを比較評価します。
+        n_games回対戦し、現在のポリシーの勝率を計算します。
+        """
+        # 現在のポリシーを持つMCTSプレイヤーを作成
+        current_mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
+                                         c_puct=self.c_puct,
+                                         n_playout=self.n_playout,
+                                         is_selfplay=False)
+        # 最善のポリシーをロードしてMCTSプレイヤーを作成
+        best_policy = PolicyValueNet(self.board_size, env=self.env)
+        try:
+            # 最善のモデルをロード
+            best_policy.load_model('./best_policy.model')
+        except Exception:
+            # モデルが存在しない場合は、勝率を0として扱い、現在のモデルが最善となるようにする
+            print("最善のポリシーモデルが見つかりません。現在のモデルを最善として保存します。")
+            return 0.0
 
+        best_mcts_player = MCTSPlayer(best_policy.policy_value_fn,
+                                      c_puct=self.c_puct,
+                                      n_playout=self.n_playout,
+                                      is_selfplay=False)
+
+        win_cnt = 0
+        # n_games/2 回、現在のプレイヤーが先手で対戦
+        for i in range(n_games // 2):
+            winner = self.game.start_play(current_mcts_player,
+                                          best_mcts_player,
+                                          start_player=0,
+                                          is_shown=0)
+            if winner == 1: # 現在のプレイヤー(player1)が勝利
+                win_cnt += 1
+        
+        # n_games/2 回、現在のプレイヤーが後手で対戦
+        for i in range(n_games // 2):
+            winner = self.game.start_play(best_mcts_player,
+                                          current_mcts_player,
+                                          start_player=0,
+                                          is_shown=0)
+            if winner == -1: # 現在のプレイヤー(player2)が勝利
+                win_cnt += 1
+        
+        win_ratio = win_cnt / n_games
+        print(f"対戦結果: {win_cnt}勝 / {n_games}戦, 勝率: {win_ratio}")
+        return win_ratio
+    
     def _simulate(self, data):
         # Simulate the game using the model and update the policy and value networks
         pass
