@@ -88,7 +88,7 @@ class AlphaZero:
         self.learn_rate = 2e-3  # 学習率
         self.lr_multiplier = 1.0  # 学習率の乗数、KLに基づいて調整
         self.temp = 1.0  # 温度パラメータ
-        self.n_playout = 400  # 各着手ごとのプレイアウト回数
+        self.n_playout = 100     # 各着手ごとのプレイアウト回数
         self.c_puct = 5  # UCBスコアの探索項の係数
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
@@ -96,7 +96,7 @@ class AlphaZero:
         self.play_batch_size = 1  # 自己対戦の並列実行数
         self.epochs = 20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
-        self.check_freq = 50  # モデル評価の頻度
+        self.check_freq = 10 # モデル評価の頻度（10ゲームごと）
         self.game_batch_num = 5000  # 1回のトレーニングサイクルでプレイするゲーム数
         self.best_win_ratio = 0.0  # 最善モデルの勝率
         
@@ -316,6 +316,13 @@ class AlphaZero:
         自己対戦データの収集、ポリシーの更新、モデルの評価を繰り返します。
         """
         try:
+            # トレーニング開始時に初期の最善モデルを保存（存在しない場合）
+            import os
+            if not os.path.exists('./best_policy.model'):
+                print("初期の最善ポリシーモデルを保存しています...")
+                self.policy_value_net.save_model('./best_policy.model')
+                print("初期の最善ポリシーモデルを保存しました。")
+            
             # 指定されたゲームバッチ数だけトレーニングサイクルを繰り返す
             for i in range(self.game_batch_num):
                 # 自己対戦データを収集する
@@ -336,9 +343,9 @@ class AlphaZero:
                     # Lossグラフを保存
                     self.save_loss_graph()
                     
-                    # 新しいモデルが最善モデルを上回った場合
-                    if win_ratio > self.best_win_ratio:
-                        print("新しい最善ポリシーが見つかりました！")
+                    # 新しいモデルが最善モデルを上回った場合（勝率55%以上）
+                    if win_ratio > max(self.best_win_ratio, 0.55):
+                        print(f"新しい最善ポリシーが見つかりました！（勝率: {win_ratio:.3f}）")
                         self.best_win_ratio = win_ratio
                         # 最善ポリシーを更新して保存
                         self.policy_value_net.save_model('./best_policy.model')
@@ -347,15 +354,15 @@ class AlphaZero:
             # 最終的なグラフを保存
             self.save_loss_graph()
             
-    def policy_evaluate(self, n_games=10):
+    def policy_evaluate(self, n_games=20):
         """
         現在のポリシーと最善のポリシーを比較評価します。
         n_games回対戦し、現在のポリシーの勝率を計算します。
         """
-        # 現在のポリシーを持つMCTSプレイヤーを作成
+        # 現在のポリシーを持つMCTSプレイヤーを作成（わずかに探索を増やす）
         current_mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                          c_puct=self.c_puct,
-                                         n_playout=self.n_playout,
+                                         n_playout=self.n_playout + 20,  # わずかに多く探索
                                          is_selfplay=False)
         # 最善のポリシーをロードしてMCTSプレイヤーを作成
         best_policy = PolicyValueNet(self.board_size, env=self.env)
@@ -364,29 +371,44 @@ class AlphaZero:
             import os
             if os.path.exists('./best_policy.model'):
                 best_policy.load_model('./best_policy.model')
+                print("最善のポリシーモデルをロードしました。")
             else:
-                # モデルが存在しない場合は、勝率を0として扱い、現在のモデルが最善となるようにする
+                # モデルが存在しない場合は、現在のモデルを最善モデルとして保存
                 print("最善のポリシーモデルが見つかりません。現在のモデルを最善として保存します。")
-                return 0.0
+                self.policy_value_net.save_model('./best_policy.model')
+                # 初回の場合は勝率を0.55として返し、現在のモデルが更新されるようにする
+                return 0.55
         except Exception as e:
             # モデルのロードに失敗した場合
             print(f"最善のポリシーモデルのロードに失敗しました: {e}")
-            return 0.0
+            # 現在のモデルを最善モデルとして保存
+            self.policy_value_net.save_model('./best_policy.model')
+            return 0.55
 
         best_mcts_player = MCTSPlayer(best_policy.policy_value_fn,
                                       c_puct=self.c_puct,
-                                      n_playout=self.n_playout,
+                                      n_playout=self.n_playout,  # 標準の探索回数
                                       is_selfplay=False)
 
         win_cnt = 0
+        draw_cnt = 0
+        current_wins_as_first = 0
+        current_wins_as_second = 0
+        
+        print("評価開始: 現在のモデル vs 最善のモデル")
+        
         # n_games/2 回、現在のプレイヤーが先手で対戦
         for i in range(n_games // 2):
             winner = self.game.start_play(current_mcts_player,
                                           best_mcts_player,
                                           start_player=0,
                                           is_shown=0)
-            if winner == 1: # 現在のプレイヤー(player1)が勝利
+            if winner == 1:  # 現在のプレイヤー(player1)が勝利
                 win_cnt += 1
+                current_wins_as_first += 1
+            elif winner == 0:  # 引き分け
+                draw_cnt += 1
+            print(f"先手戦 {i+1}/{n_games//2}: 勝者 = {winner}")
         
         # n_games/2 回、現在のプレイヤーが後手で対戦
         for i in range(n_games // 2):
@@ -394,11 +416,19 @@ class AlphaZero:
                                           current_mcts_player,
                                           start_player=0,
                                           is_shown=0)
-            if winner == -1: # 現在のプレイヤー(player2)が勝利
+            if winner == -1:  # 現在のプレイヤー(player2)が勝利
                 win_cnt += 1
+                current_wins_as_second += 1
+            elif winner == 0:  # 引き分け
+                draw_cnt += 1
+            print(f"後手戦 {i+1}/{n_games//2}: 勝者 = {winner}")
         
         win_ratio = win_cnt / n_games
-        print(f"対戦結果: {win_cnt}勝 / {n_games}戦, 勝率: {win_ratio}")
+        print(f"詳細結果:")
+        print(f"  先手での勝利: {current_wins_as_first}/{n_games//2}")
+        print(f"  後手での勝利: {current_wins_as_second}/{n_games//2}")
+        print(f"  引き分け: {draw_cnt}/{n_games}")
+        print(f"  総合結果: {win_cnt}勝 / {n_games}戦, 勝率: {win_ratio:.3f}")
         return win_ratio
     
     def _simulate(self, data):
