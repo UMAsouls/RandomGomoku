@@ -3,6 +3,9 @@ from GomokuEnv import GomokuEnv
 import torch
 from collections import deque
 import random
+import torch.nn.functional as F
+from network import PolicyValueNet
+from mcts import MCTSPlayer
 BOARD_SIZE = 8  # ボードサイズ
 N_IN_ROW = 5 # 勝利条件（連続する石の数）
 
@@ -29,7 +32,7 @@ class AlphaZero:
         
         # モデルの初期化
         # policy_value_netを初期化 (PolicyValueNetはポリシーとバリューネットワークを統合したクラスと仮定)
-        self.policy_value_net = PolicyValueNet(self.board_size)
+        self.policy_value_net = PolicyValueNet(self.board_size,env=self.env)
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                        c_puct=self.c_puct, n_playout=self.n_playout,
                                        is_selfplay=True)
@@ -44,7 +47,7 @@ class AlphaZero:
                 # rotate counterclockwise
                 equi_state = np.array([np.rot90(s, i) for s in state])
                 equi_mcts_prob = np.rot90(np.flipud(
-                    mcts_prob.reshape(self.board_height, self.board_width)), i)
+                    mcts_prob.reshape(self.board_size)), i)
                 extend_data.append((equi_state,
                                     np.flipud(equi_mcts_prob).flatten(),
                                     winner))

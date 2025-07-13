@@ -51,10 +51,11 @@ class Net(nn.Module):
 class PolicyValueNet():
     """ポリシー・バリューネットワーク"""
     def __init__(self, board_size,
-                 model_file=None, use_gpu=False):
+                 model_file=None, use_gpu=False,env:GomokuEnv=None):
         self.use_gpu = use_gpu
         self.board_size = board_size
         self.l2_const = 1e-4  # L2ペナルティの係数
+        self.env = env
         # ポリシー・バリューネットワークモジュール
         if self.use_gpu:
             self.policy_value_net = Net(board_size, board_size).cuda()
@@ -81,7 +82,39 @@ class PolicyValueNet():
         print(f"有効な手の位置: {legal_positions}")
         return legal_positions
     
-            
+    def _board_to_state_input(self, board: Board):
+        """
+        盤面の状態をネットワークの入力形式に変換します。
+        入力: Boardオブジェクト
+        出力: 4x(盤面サイズ)x(盤面サイズ) のnumpy配列
+        """
+        board_state = board.GetBoardInt()
+        current_player = self.env.current_player
+        last_move = self.env.lastmove
+
+        # 4つの特徴平面を準備
+        # 0: 現在のプレイヤーの石
+        # 1: 相手プレイヤーの石
+        # 2: 最後の着手
+        # 3: 手番の色
+        square_state = np.zeros((4, self.board_size, self.board_size))
+
+        # 0: 現在のプレイヤーの石, 1: 相手プレイヤーの石
+        square_state[0] = (board_state == current_player)
+        square_state[1] = (board_state == (3 - current_player)) # 相手プレイヤー (1 -> 2, 2 -> 1)
+
+        # 2: 最後の着手
+        if last_move is not None:
+            y, x = last_move
+            print(f"最後の着手: ({x}, {y})")
+            square_state[2, y, x] = 1.0
+        
+        # 3: 手番の色 (黒番なら全面1.0)
+        if current_player == 1: # 黒番
+            square_state[3] = 1.0
+        
+        return square_state
+
     def policy_value(self, state_batch):
         """
         入力: 状態のバッチ
@@ -103,8 +136,9 @@ class PolicyValueNet():
         出力: (行動, 確率) のタプルのリストと盤面の評価値
         """
         # stateから0の部分だけを抽出
-        legal_positions = board.get_legal_positions()
-        current_state = np.ascontiguousarray(board.current_state().reshape(
+        legal_positions = self.get_legal_positions(board)
+        current_state = self._board_to_state_input(board)
+        current_state = np.ascontiguousarray(current_state.reshape(
                 -1, 4, self.board_size, self.board_size))
         
         if self.use_gpu:

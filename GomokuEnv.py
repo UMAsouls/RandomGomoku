@@ -15,6 +15,7 @@ class GomokuEnv:
         self.blackStones = 0
         self.whiteStones = 0
         self.device = device
+        self.lastmove = None
         if train_target == "first":
             self.train_player = 1
         elif train_target == "second":
@@ -40,6 +41,8 @@ class GomokuEnv:
             done = True
             board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
             return board_tensor, reward, done, {"invalid_action": True}
+
+        self.lastmove = action
 
         if self.current_player == 1:
             self.stone = Stone.BLACK
