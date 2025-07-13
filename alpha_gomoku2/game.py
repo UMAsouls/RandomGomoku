@@ -32,7 +32,7 @@ class Game(object):
                     print("It's a draw!")
             return reward
             
-        s
+        
     def start_self_play(self, player, is_shown=0, temp=1e-3):
         """
         セルフプレイを開始します。

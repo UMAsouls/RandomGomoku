@@ -66,8 +66,7 @@ class PolicyValueNet():
                                     weight_decay=self.l2_const)
 
         if model_file:
-            net_params = torch.load(model_file)
-            self.policy_value_net.load_state_dict(net_params)
+            self.load_model(model_file)
     def get_legal_positions(self, board: Board):
         #形式: 整数のリスト（例：[0, 1, 2, 5, 7, 10, ...]）
         # 意味: 各整数は盤面上の空いているマス目の位置を1次元のインデックスで表現
@@ -195,3 +194,14 @@ class PolicyValueNet():
         """モデルのパラメータをファイルに保存します"""
         net_params = self.get_policy_param()  # モデルのパラメータを取得
         torch.save(net_params, model_file)
+        
+    def load_model(self, model_file):
+        """モデルのパラメータをファイルから読み込みます"""
+        if self.use_gpu:
+            device = 'cuda'
+        else:
+            device = 'cpu'
+        net_params = torch.load(model_file, map_location=device)
+        self.policy_value_net.load_state_dict(net_params)
+        print(f"モデルをロードしました: {model_file}")
+        print(f"モデルをロードしました: {model_file}")

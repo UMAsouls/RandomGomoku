@@ -193,10 +193,16 @@ class AlphaZero:
         best_policy = PolicyValueNet(self.board_size, env=self.env)
         try:
             # 最善のモデルをロード
-            best_policy.load_model('./best_policy.model')
-        except Exception:
-            # モデルが存在しない場合は、勝率を0として扱い、現在のモデルが最善となるようにする
-            print("最善のポリシーモデルが見つかりません。現在のモデルを最善として保存します。")
+            import os
+            if os.path.exists('./best_policy.model'):
+                best_policy.load_model('./best_policy.model')
+            else:
+                # モデルが存在しない場合は、勝率を0として扱い、現在のモデルが最善となるようにする
+                print("最善のポリシーモデルが見つかりません。現在のモデルを最善として保存します。")
+                return 0.0
+        except Exception as e:
+            # モデルのロードに失敗した場合
+            print(f"最善のポリシーモデルのロードに失敗しました: {e}")
             return 0.0
 
         best_mcts_player = MCTSPlayer(best_policy.policy_value_fn,
