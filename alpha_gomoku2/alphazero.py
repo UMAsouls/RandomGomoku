@@ -1,5 +1,6 @@
 import numpy as np
 from GomokuEnv import GomokuEnv
+from mcts import MCTSPlayer
 from game import Game
 import torch
 from collections import deque
