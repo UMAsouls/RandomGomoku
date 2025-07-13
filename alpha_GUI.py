@@ -134,6 +134,8 @@ class AlphaGomokuGUI:
             for x in range(self.board_size):
                 if self.state[y][x] == 0:
                     valid_moves.append((x, y))
+        # print(f"有効な手の数: {len(valid_moves)}")
+        # print(f"有効な手の位置: {valid_moves}")
         return valid_moves
 
     # 勝利パターンを検出（AIが一手で勝てるか）

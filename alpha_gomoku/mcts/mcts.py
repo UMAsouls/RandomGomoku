@@ -415,8 +415,4 @@ class MCTS:
             'average_search_time': 0.0,
             'search_times': []
         }
-            'winning_moves_found': 0,
-            'blocking_moves_found': 0,
-            'average_search_time': 0.0,
-            'search_times': []
-        }
+        
