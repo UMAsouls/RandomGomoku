@@ -1,5 +1,5 @@
 import torch
-
+from alphazero import AlphaZero
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def main():
     print(f"使用デバイス: {device}")
