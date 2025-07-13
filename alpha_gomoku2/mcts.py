@@ -71,7 +71,15 @@ class TreeNode(object):
     def is_root(self):
         """根ノードかどうかを確認。"""
         return self._parent is None
-
+def action_to_location(action, board_size):
+    """アクションを2次元の座標に変換する。
+    action: 1次元のインデックス（0からboard_size*board_size-1まで）
+    board_size: 盤面のサイズ
+    Return: (x, y)のタプル
+    """
+    y = action // board_size
+    x = action % board_size
+    return x, y
 class MCTS(object):
     def __init__(self, policy_value_fn, c_puct=5, n_playout=10000):
         """
@@ -93,22 +101,33 @@ class MCTS(object):
         State is modified in-place, so a copy must be provided.
         """
         node = self._root
+        done = False
+        reward = 0
         while(True):
             if node.is_leaf():
                 break
             # Greedily select next move.
             action, node = node.select(self._c_puct)
-            _, reward, done, _ = env.step(action)
-        action_priors, leaf_value = self._policy(env.board)
-        # Expand the leaf node with the action priors.
+            
+            _, reward, done, _ = env.step(action_to_location(action, env.board_size))
+        
+        # Check if game is finished after reaching leaf
         if not done:
+            # Game is not finished, get policy evaluation
+            action_priors, leaf_value = self._policy(env.board)
             node.expand(action_priors)
         else:
+            # Game is finished, determine leaf value based on reward
             if reward == -1:
                 leaf_value = 0
             else:
                 #TODO:等式が意味あってるか確認
                 leaf_value = 1 if reward == env.train_player else -1
+        
+        # If game is not finished, we still need to get leaf_value
+        if not done:
+            action_priors, leaf_value = self._policy(env.board)
+        
         node.update_recursive(-leaf_value)
         
     def get_move_probs(self, env:GomokuEnv, temp=1e-3):
@@ -154,22 +173,22 @@ class MCTSPlayer(object):
 
     def reset_player(self):
         self.mcts.update_with_move(-1)
-    def get_legal_positions(self, board: Board):
+    def get_legal_positions(self,board_size, board: Board):
         #形式: 整数のリスト（例：[0, 1, 2, 5, 7, 10, ...]）
         # 意味: 各整数は盤面上の空いているマス目の位置を1次元のインデックスで表現
         # 範囲: 0 ～ (board_size × board_size - 1)
         state = board.GetBoardInt()
         legal_positions = []
-        for y in range(self.board_size):
-            for x in range(self.board_size):
+        for y in range(board_size):
+            for x in range(board_size):
                 if state[y][x] == 0:
-                    legal_positions.append(x+ y * self.board_size)
-        print(f"有効な手の数: {len(legal_positions)}")
-        print(f"有効な手の位置: {legal_positions}")
+                    legal_positions.append(x+ y * board_size)
+        # print(f"有効な手の数: {len(legal_positions)}")
+        # print(f"有効な手の位置: {legal_positions}")
         return legal_positions
     def get_action(self, env:GomokuEnv, temp=1e-3, return_prob=0):
         
-        sensible_moves = self.get_legal_positions(env.board)
+        sensible_moves = self.get_legal_positions(env.board_size,env.board)
         # the pi vector returned by MCTS as in the alphaGo Zero paper
         move_probs = np.zeros(env.board_size * env.board_size)
         if len(sensible_moves) > 0:
@@ -195,6 +214,8 @@ class MCTSPlayer(object):
 #                location = board.move_to_location(move)
 #                print("AI move: %d,%d\n" % (location[0], location[1]))
 
+            # アクションを2次元の座標に変換
+            move = action_to_location(move, env.board_size)
             if return_prob:
                 return move, move_probs
             else:

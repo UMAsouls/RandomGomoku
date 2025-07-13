@@ -45,6 +45,7 @@ class Game(object):
         while True:
             move, mcts_prob = player.get_action(self.env, temp=temp, return_prob=True)
             #TODO:ボードがあっているか確認
+            print(self.env.board.GetBoardInt())
             states.append(self.env.board.GetBoardInt())
             mcts_probs.append(mcts_prob)
             current_players.append(self.env.current_player)

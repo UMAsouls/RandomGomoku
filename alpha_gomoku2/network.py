@@ -77,8 +77,8 @@ class PolicyValueNet():
             for x in range(self.board_size):
                 if state[y][x] == 0:
                     legal_positions.append(x+ y * self.board_size)
-        print(f"有効な手の数: {len(legal_positions)}")
-        print(f"有効な手の位置: {legal_positions}")
+        # print(f"有効な手の数: {len(legal_positions)}")
+        # print(f"有効な手の位置: {legal_positions}")
         return legal_positions
     
     def _board_to_state_input(self, board: Board):

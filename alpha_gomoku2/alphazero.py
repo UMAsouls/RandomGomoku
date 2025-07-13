@@ -47,20 +47,44 @@ class AlphaZero:
         """
         extend_data = []
         for state, mcts_prob, winner in play_data:
-            for i in [1, 2, 3, 4]:
-                # rotate counterclockwise
-                equi_state = np.array([np.rot90(s, i) for s in state])
-                equi_mcts_prob = np.rot90(np.flipud(
-                    mcts_prob.reshape(self.board_size)), i)
-                extend_data.append((equi_state,
-                                    np.flipud(equi_mcts_prob).flatten(),
+            # stateをNumPy配列に変換
+            state = np.array(state)
+            mcts_prob = np.array(mcts_prob)
+            
+            # stateが1次元の場合、2次元に変換
+            if len(state.shape) == 1:
+                state = state.reshape(self.board_size, self.board_size)
+            elif len(state.shape) == 3:
+                # 既に3次元の場合、最初の2次元のみを使用
+                state = state[:, :, 0] if state.shape[2] > 1 else state.reshape(self.board_size, self.board_size)
+            
+            # mcts_probを2次元に変換
+            mcts_prob_2d = mcts_prob.reshape(self.board_size, self.board_size)
+            
+            # 回転による拡張（90度、180度、270度）
+            for i in [1, 2, 3]:
+                # 状態を回転
+                equi_state = np.rot90(state, i)
+                # 確率分布も同じように回転
+                equi_mcts_prob = np.rot90(mcts_prob_2d, i)
+                extend_data.append((equi_state.flatten(),
+                                    equi_mcts_prob.flatten(),
                                     winner))
-                # flip horizontally
-                equi_state = np.array([np.fliplr(s) for s in equi_state])
-                equi_mcts_prob = np.fliplr(equi_mcts_prob)
-                extend_data.append((equi_state,
-                                    np.flipud(equi_mcts_prob).flatten(),
+                
+                # 水平反転
+                equi_state_flip = np.fliplr(equi_state)
+                equi_mcts_prob_flip = np.fliplr(equi_mcts_prob)
+                extend_data.append((equi_state_flip.flatten(),
+                                    equi_mcts_prob_flip.flatten(),
                                     winner))
+            
+            # 元の状態の水平反転のみ
+            equi_state_flip = np.fliplr(state)
+            equi_mcts_prob_flip = np.fliplr(mcts_prob_2d)
+            extend_data.append((equi_state_flip.flatten(),
+                                equi_mcts_prob_flip.flatten(),
+                                winner))
+        
         return extend_data
     # セルフプレイデータを収集するメソッド
     def collect_selfplay_data(self, num_games):
