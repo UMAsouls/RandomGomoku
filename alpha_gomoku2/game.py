@@ -8,6 +8,31 @@ class Game(object):
         self.board = env.board
         self.current_player = env.current_player
         self.lastmove = env.lastmove
+
+    def start_play(self, player1, player2, start_player=0, is_shown=1):
+        if start_player not in (0, 1):
+         raise Exception('start_player should be either 0 (player1 first) '
+                        'or 1 (player2 first)')
+        self.env = GomokuEnv(board_size=self.board_size)
+        p1, p2 = 1,2
+        player1.set_player_ind(p1)
+        player2.set_player_ind(p2)
+        players = {p1: player1, p2: player2}
+        if is_shown:
+            print(f"Game start: Player {p1} vs Player {p2}")
+            self.env.board.PrintBoard()
+        _, reward, done, _ = self.env.step(None)  # 初期化
+        if done:
+            if is_shown:
+                if reward == 1:
+                    print(f"Player {p1} wins!")
+                elif reward == -1:
+                    print(f"Player {p2} wins!")
+                else:
+                    print("It's a draw!")
+            return reward
+            
+        s
     def start_self_play(self, player, is_shown=0, temp=1e-3):
         """
         セルフプレイを開始します。
