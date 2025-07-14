@@ -88,7 +88,7 @@ class AlphaZero:
         self.learn_rate = 2e-3  # 学習率
         self.lr_multiplier = 1.0  # 学習率の乗数、KLに基づいて調整
         self.temp = 1.0  # 温度パラメータ
-        self.n_playout = 100     # 各着手ごとのプレイアウト回数
+        self.n_playout = 400     # 各着手ごとのプレイアウト回数
         self.c_puct = 5  # UCBスコアの探索項の係数
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
@@ -96,7 +96,7 @@ class AlphaZero:
         self.play_batch_size = 1  # 自己対戦の並列実行数
         self.epochs = 20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
-        self.check_freq = 10 # モデル評価の頻度（10ゲームごと）
+        self.check_freq = 100 # モデル評価の頻度（100ゲームごと）
         self.game_batch_num = 5000  # 1回のトレーニングサイクルでプレイするゲーム数
         self.best_win_ratio = 0.0  # 最善モデルの勝率
         
@@ -344,7 +344,7 @@ class AlphaZero:
                     self.save_loss_graph()
                     
                     # 新しいモデルが最善モデルを上回った場合（勝率55%以上）
-                    if win_ratio > max(self.best_win_ratio, 0.55):
+                    if win_ratio > max(self.best_win_ratio, 0.51): 
                         print(f"新しい最善ポリシーが見つかりました！（勝率: {win_ratio:.3f}）")
                         self.best_win_ratio = win_ratio
                         # 最善ポリシーを更新して保存
@@ -354,7 +354,7 @@ class AlphaZero:
             # 最終的なグラフを保存
             self.save_loss_graph()
             
-    def policy_evaluate(self, n_games=20):
+    def policy_evaluate(self, n_games=10):
         """
         現在のポリシーと最善のポリシーを比較評価します。
         n_games回対戦し、現在のポリシーの勝率を計算します。
