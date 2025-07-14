@@ -88,7 +88,7 @@ class AlphaZero:
         self.learn_rate = 2e-3  # 学習率
         self.lr_multiplier = 1.0  # 学習率の乗数、KLに基づいて調整
         self.temp = 1.0  # 温度パラメータ
-        self.n_playout = 100     # 各着手ごとのプレイアウト回数
+        self.n_playout = 10     # 各着手ごとのプレイアウト回数
         self.c_puct = 5  # UCBスコアの探索項の係数
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
@@ -354,7 +354,7 @@ class AlphaZero:
             # 最終的なグラフを保存
             self.save_loss_graph()
             
-    def policy_evaluate(self, n_games=20):
+    def policy_evaluate(self, n_games=2):
         """
         現在のポリシーと最善のポリシーを比較評価します。
         n_games回対戦し、現在のポリシーの勝率を計算します。
