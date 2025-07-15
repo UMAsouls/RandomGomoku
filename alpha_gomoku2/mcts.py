@@ -223,7 +223,10 @@ class MCTS(object):
         else:
             acts, visits = zip(*act_visits)
             act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
-        
+        print(f"探索回数: {sum(visits)}")
+        print(f"有効な手の数: {len(acts)}")
+        print(f"有効な手の位置: {acts}")
+        print(f"有効な手の確率: {act_probs}")
         return acts, act_probs
     
     def get_legal_positions(self, board_size, board: Board):
@@ -256,6 +259,7 @@ class MCTSPlayer(object):
                  c_puct=5, n_playout=2000, is_selfplay=0):
         self.mcts = MCTS(policy_value_function, c_puct, n_playout)
         self._is_selfplay = is_selfplay
+        print("MCTSPlayer initialized with c_puct={}, n_playout={}".format(c_puct, n_playout))
 
     def set_player_ind(self, p):
         self.player = p

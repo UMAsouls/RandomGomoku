@@ -125,23 +125,8 @@ class RandomVsAIGUI:
         )
         self.status_label.pack()
         
-        # ゲーム速度設定
-        speed_frame = tk.Frame(self.right_frame)
-        speed_frame.pack(fill='x', pady=(0, 20))
-        
-        tk.Label(speed_frame, text="ゲーム速度:", font=('Arial', 12, 'bold')).pack()
-        
-        self.speed_var = tk.DoubleVar(value=0.5)
-        speed_scale = tk.Scale(
-            speed_frame, 
-            from_=0.1, 
-            to=2.0, 
-            resolution=0.1,
-            orient='horizontal',
-            variable=self.speed_var,
-            label="秒/手"
-        )
-        speed_scale.pack(fill='x')
+        # ゲーム速度設定（削除）
+        # MCTSが完了するまでしっかり待機するため、時間制限を削除
         
         # AI思考時間設定
         ai_frame = tk.Frame(self.right_frame)
@@ -176,15 +161,21 @@ class RandomVsAIGUI:
                 value = int(self.ai_entry.get())
                 if value > 0:
                     self.ai_playout_var.set(value)
+                    print(f"プレイアウト回数を直接入力で更新: {value}")
                     # スケールの範囲を動的に調整
                     if value > 50000:
                         ai_scale.config(to=value + 10000)
+                else:
+                    print("プレイアウト回数は正の値である必要があります")
             except ValueError:
+                print("無効な値が入力されました")
                 pass
         
         def update_entry_from_scale(*args):
+            new_value = self.ai_playout_var.get()
             self.ai_entry.delete(0, tk.END)
-            self.ai_entry.insert(0, str(self.ai_playout_var.get()))
+            self.ai_entry.insert(0, str(new_value))
+            print(f"プレイアウト回数をスケールで更新: {new_value}")
         
         tk.Button(entry_frame, text="適用", command=update_from_entry, font=('Arial', 9)).pack(side='left')
         
@@ -311,18 +302,21 @@ class RandomVsAIGUI:
             
             self.policy_value_net = PolicyValueNet(
                 board_size=self.board_size,
-                model_file="best_policy.model",
+                model_file="current_policy.model",
                 use_gpu=use_gpu,
                 env=temp_env
             )
             
             # MCTSプレイヤーの初期化（初期値として1000を使用）
+            initial_playout = self.ai_playout_var.get()
             self.ai_player = MCTSPlayer(
                 self.policy_value_net.policy_value_fn,
                 c_puct=5,
-                n_playout=1000,  # 初期値、後で動的に変更
+                n_playout=initial_playout,  # 初期値、後で動的に変更
                 is_selfplay=0
             )
+            
+            print(f"MCTSプレイヤー初期化完了: 初期プレイアウト回数 = {initial_playout}")
             
             # ランダムプレイヤーの初期化
             self.random_player = RandomPlayer(self.board_size)
@@ -442,7 +436,7 @@ class RandomVsAIGUI:
                 try:
                     self.play_single_game()
                     if self.game_running:
-                        time.sleep(1.0)  # ゲーム間の間隔
+                        time.sleep(0.5)  # ゲーム間の短い間隔のみ残す
                 except Exception as e:
                     print(f"ゲーム実行エラー: {str(e)}")
                     traceback.print_exc()
@@ -494,7 +488,10 @@ class RandomVsAIGUI:
                 
                 # AI思考時間を動的に更新
                 if hasattr(self, 'ai_player'):
-                    self.ai_player.n_playout = self.ai_playout_var.get()
+                    playout_count = self.ai_playout_var.get()
+                    self.ai_player.n_playout = playout_count
+                    print(f"AI思考中: MCTSプレイアウト回数 = {playout_count}")
+                    self.master.after(0, lambda: self.status_label.config(text=f"AI思考中 (プレイアウト: {playout_count})"))
                 
                 board = self.env.board.GetBoardInt()
                 action = self.ai_player.get_action(self.env)
@@ -543,9 +540,9 @@ class RandomVsAIGUI:
                         self.random_wins_as_second += 1
                     result = "ランダム勝利"
             
-            # 手番の遅延
-            if self.game_running:
-                time.sleep(self.speed_var.get())
+            # 手番の遅延を削除 - MCTSが完了するまで待機
+            # if self.game_running:
+            #     time.sleep(self.speed_var.get())
         
         # ゲーム終了処理
         if self.game_running:
