@@ -131,7 +131,11 @@ class Game(object):
             
             #TODO:ボードがあっているか確認
             # print(self.env.board.GetBoardInt())
-            states.append(self.env.board.GetBoardInt())
+            #　現在のプレイヤーの石のみのstateを返す、値はどちらのプレイヤーでも1
+            
+                        
+            # print(board_array)
+            states.append(self.make_state(self.env.board.GetBoardInt()))
             mcts_probs.append(mcts_prob)
             current_players.append(self.env.current_player)
             # print("current_players")
@@ -148,5 +152,38 @@ class Game(object):
                     winners_z[np.array(current_players) != winner] = -1.0
                     # print(f"winners_z: {winners_z}")
                 player.reset_player()
+                print("返り値チェック")
+                print("states:", states)
+                # print("mcts_probs:", mcts_probs)
+                print("winners_z:", winners_z)
                 return winners_z, zip(states, mcts_probs, winners_z)
+    def make_state(self, board_array:list[list[int]]):
+        """return the board state from the perspective of the current player.
+        state shape: 4*width*height
+        """
+        square_state = np.zeros((4, self.board_size, self.board_size))
+        if board_array is not None:
+            # 現在のプレイヤーの石の位置を取得
+            for i in range(self.board_size):
+                for j in range(self.board_size):
+                    if board_array[i][j] == self.env.current_player:
+                        square_state[0][i][j] = 1.0
+                    elif board_array[i][j] != 0:  # 相手の石
+                        square_state[1][i][j] = 1.0
             
+            # 最後の手の位置を表示
+            if self.env.lastmove is not None:
+                last_x, last_y = self.env.lastmove
+                square_state[2][last_y][last_x] = 1.0
+            
+            # 手数が偶数の場合（後手番）を表示
+            board_array_np = np.array(board_array)
+            total_stones = np.sum(board_array_np != 0)
+            # print(f"Total stones placed: {total_stones}")
+            # print(f"Board array: {board_array}")
+            if total_stones % 2 == 0:
+                square_state[3][:, :] = 1.0  # indicate the colour to play
+        
+        return square_state
+            
+        
