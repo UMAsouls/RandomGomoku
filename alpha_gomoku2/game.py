@@ -75,9 +75,8 @@ class Game(object):
             
             # 行動を実行
             try:
-                _, reward, done, _ = self.env.step(move)
+                _, reward, done, info = self.env.step(move)
                 move_count += 1
-                
                 if is_shown and hasattr(self.env.board, 'PrintBoard'):
                     self.env.board.PrintBoard()
                 
@@ -92,32 +91,19 @@ class Game(object):
         
         # ゲーム終了処理
         if done:
+            winner = info.get('which_player', 0) #先手：1, 後手：2
+            
             self.env.board.PrintBoard()
             if is_shown:
-                if reward == 1:
-                    print(f"\nゲーム終了: 先手（Player 1）の勝利!")
-                elif reward == -1:
-                    print(f"\nゲーム終了: 後手（Player 2）の勝利!")
-                else:
-                    print("\nゲーム終了: 引き分け!")
-            
-            # AlphaZeroの評価に合わせた勝敗判定を返す
-            if start_player == 0:
-                # player1が先手の場合
-                if reward == 1:
-                    return 1  # player1（現在のモデル）の勝利
-                elif reward == -1:
-                    return -1  # player2（最善のモデル）の勝利
-                else:
-                    return 0  # 引き分け
-            else:
-                # player2が先手の場合
-                if reward == 1:
-                    return -1  # player2（最善のモデル）の勝利
-                elif reward == -1:
-                    return 1  # player1（現在のモデル）の勝利
-                else:
-                    return 0  # 引き分け
+                print(f"\nゲーム終了: Player {winner} の勝利!")
+                
+            if winner == 1:
+                print("Player 1の勝利")
+                return 1
+            elif winner == 2:
+                print("Player 2の勝利")
+                return -1
+
         else:
             # 最大手数に達した場合は引き分け
             if is_shown:
@@ -148,13 +134,19 @@ class Game(object):
             states.append(self.env.board.GetBoardInt())
             mcts_probs.append(mcts_prob)
             current_players.append(self.env.current_player)
+            # print("current_players")
+            # print(self.env.current_player)
             
-            _,reward,done,_= self.env.step(move)
+            _,reward,done,info= self.env.step(move)
+
             if done:
+                winner = info.get('which_player', 0)
+                print(f"Game Over: Player {winner} wins with reward {reward}")
                 winners_z = np.zeros(len(current_players))
-                if reward != -1:
-                    winners_z[np.array(current_players) == self.env.train_player] = 1
-                    winners_z[np.array(current_players) != self.env.train_player] = -1
+                if reward != 0:
+                    winners_z[np.array(current_players) == winner] = 1.0
+                    winners_z[np.array(current_players) != winner] = -1.0
+                    # print(f"winners_z: {winners_z}")
                 player.reset_player()
                 return winners_z, zip(states, mcts_probs, winners_z)
             

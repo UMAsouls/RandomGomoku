@@ -96,11 +96,25 @@ def parallel_selfplay_worker(args):
         
         # 自己対戦データを収集
         all_play_data = []
+        wins = 0
+        losses = 0
+        draws = 0
         
         for i in range(game_count):
             try:
-                winner, play_data = game.start_self_play(mcts_player, temp=temp)
+                winner, play_data = game.start_self_play(mcts_player, temp=temp, is_shown=(i==0))  # 最初のゲームのみ詳細表示
                 play_data = list(play_data)
+                
+                # 勝敗統計を更新
+                if len(play_data) > 0:
+                    # 最後のwinner値を確認
+                    last_winner = winner[-1] if len(winner) > 0 else 0
+                    if last_winner > 0:
+                        wins += 1
+                    elif last_winner < 0:
+                        losses += 1
+                    else:
+                        draws += 1
                 
                 # データを収集
                 if len(play_data) > 0:
@@ -111,6 +125,7 @@ def parallel_selfplay_worker(args):
                 continue
         
         print(f"ワーカー {worker_id}: {game_count} ゲーム完了, {len(all_play_data)} データ収集")
+        print(f"ワーカー {worker_id}: 勝利 {wins}, 敗北 {losses}, 引き分け {draws}")
         return all_play_data
         
     except Exception as e:
@@ -128,7 +143,7 @@ class AlphaZeroParallel:
         self.learn_rate = 2e-3  # 学習率
         self.lr_multiplier = 1.0  # 学習率の乗数、KLに基づいて調整
         self.temp = 1.0  # 温度パラメータ
-        self.n_playout = 400     # 各着手ごとのプレイアウト回数
+        self.n_playout = 10     # 各着手ごとのプレイアウト回数
         self.c_puct = 5  # UCBスコアの探索項の係数
         self.buffer_size = 25000  # 経験再生バッファのサイズ（並列処理に対応して増量）
         self.batch_size = 512  # トレーニング時のバッチサイズ
