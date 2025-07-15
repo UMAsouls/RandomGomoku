@@ -144,10 +144,10 @@ class Game(object):
             _,reward,done,info= self.env.step(move)
 
             if done:
-                winner = info.get('which_player', 0)
+                winner = info.get('win_player', 0)
                 print(f"Game Over: Player {winner} wins with reward {reward}")
                 winners_z = np.zeros(len(current_players))
-                if reward != 0:
+                if winner != 0:
                     winners_z[np.array(current_players) == winner] = 1.0
                     winners_z[np.array(current_players) != winner] = -1.0
                     # print(f"winners_z: {winners_z}")

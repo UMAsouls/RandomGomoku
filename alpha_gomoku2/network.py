@@ -81,7 +81,7 @@ class PolicyValueNet():
         """デストラクタでスレッドプールを終了"""
         if hasattr(self, 'cpu_executor'):
             self.cpu_executor.shutdown(wait=True)
-    
+    #TODO:チャンネルあってる？
     def _preprocess_board_cpu(self, board: Board):
         """CPUでボードの前処理を行う"""
         board_state = board.GetBoardInt()

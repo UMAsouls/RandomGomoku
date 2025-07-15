@@ -9,30 +9,34 @@ import threading
 import time
 import traceback
 import sys
-import random
 
-class RandomPlayer:
-    """ランダムに手を選ぶプレイヤー"""
+class HumanPlayer:
+    """人間プレイヤー（GUI操作）"""
     def __init__(self, board_size):
         self.board_size = board_size
+        self.selected_move = None
+        self.move_ready = False
     
     def get_action(self, board):
-        """有効な手からランダムに選択"""
-        valid_moves = []
-        for y in range(self.board_size):
-            for x in range(self.board_size):
-                if board[y][x] == 0:  # 空きマス
-                    valid_moves.append((x, y))
-        
-        if not valid_moves:
-            return None  # 有効な手がない
-        
-        return random.choice(valid_moves)
+        """人間の手を待機（GUI操作で設定される）"""
+        # この関数は実際には使用されない
+        # GUIのクリックイベントでselected_moveが設定される
+        return self.selected_move
+    
+    def reset_move(self):
+        """手の選択をリセット"""
+        self.selected_move = None
+        self.move_ready = False
+    
+    def set_move(self, x, y):
+        """手を設定"""
+        self.selected_move = (x, y)
+        self.move_ready = True
 
-class RandomVsAIGUI:
+class HumanVsAIGUI:
     def __init__(self, master):
         self.master = master
-        self.master.title("ランダムプレイヤー vs AlphaGomoku AI")
+        self.master.title("人間プレイヤー vs AlphaGomoku AI")
         self.master.geometry("1000x700")
         
         # ゲーム設定
@@ -43,22 +47,23 @@ class RandomVsAIGUI:
         # ゲーム状態
         self.env = None
         self.ai_player = None
-        self.random_player = None
+        self.human_player = None
         self.game_over = False
         self.game_running = False
+        self.waiting_for_human = False
+        self.human_is_first = True  # 人間が先手かどうか
         
         # 統計
         self.ai_wins = 0
-        self.random_wins = 0
+        self.human_wins = 0
         self.draws = 0
         self.total_games = 0
-        self.current_first_player = "random"  # 現在のゲームの先手プレイヤー
         
         # 詳細統計（先手後手別）
         self.ai_wins_as_first = 0
         self.ai_wins_as_second = 0
-        self.random_wins_as_first = 0
-        self.random_wins_as_second = 0
+        self.human_wins_as_first = 0
+        self.human_wins_as_second = 0
         
         # GUI要素の初期化
         self.setup_gui()
@@ -91,6 +96,9 @@ class RandomVsAIGUI:
         )
         self.canvas.pack(expand=True)
         
+        # マウスクリックイベントのバインド
+        self.canvas.bind("<Button-1>", self.on_canvas_click)
+        
         # コントロールパネル
         self.setup_controls()
         
@@ -102,7 +110,7 @@ class RandomVsAIGUI:
         # タイトル
         title_label = tk.Label(
             self.right_frame, 
-            text="ランダム vs AI", 
+            text="人間 vs AI", 
             font=('Arial', 16, 'bold')
         )
         title_label.pack(pady=(0, 20))
@@ -125,20 +133,17 @@ class RandomVsAIGUI:
         )
         self.status_label.pack()
         
-        # ゲーム速度設定（削除）
-        # MCTSが完了するまでしっかり待機するため、時間制限を削除
-        
         # AI思考時間設定
         ai_frame = tk.Frame(self.right_frame)
         ai_frame.pack(fill='x', pady=(0, 20))
         
         tk.Label(ai_frame, text="AI思考時間:", font=('Arial', 12, 'bold')).pack()
         
-        self.ai_playout_var = tk.IntVar(value=400)
+        self.ai_playout_var = tk.IntVar(value=1000)
         ai_scale = tk.Scale(
             ai_frame, 
             from_=100, 
-            to=50000, 
+            to=10000, 
             resolution=100,
             orient='horizontal',
             variable=self.ai_playout_var,
@@ -163,8 +168,8 @@ class RandomVsAIGUI:
                     self.ai_playout_var.set(value)
                     print(f"プレイアウト回数を直接入力で更新: {value}")
                     # スケールの範囲を動的に調整
-                    if value > 50000:
-                        ai_scale.config(to=value + 10000)
+                    if value > 10000:
+                        ai_scale.config(to=value + 5000)
                 else:
                     print("プレイアウト回数は正の値である必要があります")
             except ValueError:
@@ -188,24 +193,18 @@ class RandomVsAIGUI:
         
         tk.Label(player_frame, text="先手プレイヤー:", font=('Arial', 12, 'bold')).pack()
         
-        self.first_player_var = tk.StringVar(value="alternating")
+        self.first_player_var = tk.StringVar(value="human")
         tk.Radiobutton(
             player_frame, 
-            text="ランダムプレイヤー固定", 
+            text="人間プレイヤー", 
             variable=self.first_player_var, 
-            value="random"
+            value="human"
         ).pack()
         tk.Radiobutton(
             player_frame, 
-            text="AIプレイヤー固定", 
+            text="AIプレイヤー", 
             variable=self.first_player_var, 
             value="ai"
-        ).pack()
-        tk.Radiobutton(
-            player_frame, 
-            text="交互に切り替え", 
-            variable=self.first_player_var, 
-            value="alternating"
         ).pack()
         
         # コントロールボタン
@@ -214,34 +213,22 @@ class RandomVsAIGUI:
         
         self.start_button = tk.Button(
             button_frame, 
-            text="ゲーム開始", 
+            text="新しいゲーム", 
             command=self.start_game,
             font=('Arial', 12),
             bg='lightgreen'
         )
         self.start_button.pack(fill='x', pady=2)
         
-        self.stop_button = tk.Button(
+        self.reset_button = tk.Button(
             button_frame, 
-            text="ゲーム停止", 
-            command=self.stop_game,
+            text="ゲームリセット", 
+            command=self.reset_game,
             font=('Arial', 12),
-            bg='lightcoral',
+            bg='lightblue',
             state='disabled'
         )
-        self.stop_button.pack(fill='x', pady=2)
-        
-        # 連続ゲーム設定
-        continuous_frame = tk.Frame(button_frame)
-        continuous_frame.pack(fill='x', pady=2)
-        
-        self.continuous_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(
-            continuous_frame,
-            text="連続ゲーム",
-            variable=self.continuous_var,
-            font=('Arial', 10)
-        ).pack()
+        self.reset_button.pack(fill='x', pady=2)
         
         self.reset_stats_button = tk.Button(
             button_frame, 
@@ -250,6 +237,16 @@ class RandomVsAIGUI:
             font=('Arial', 12)
         )
         self.reset_stats_button.pack(fill='x', pady=2)
+        
+        # 操作説明
+        help_frame = tk.Frame(self.right_frame)
+        help_frame.pack(fill='x', pady=(0, 20))
+        
+        tk.Label(help_frame, text="操作方法:", font=('Arial', 10, 'bold')).pack()
+        tk.Label(help_frame, text="・盤面をクリックして石を置く", font=('Arial', 9)).pack()
+        tk.Label(help_frame, text="・黒石: 先手プレイヤー", font=('Arial', 9)).pack()
+        tk.Label(help_frame, text="・白石: 後手プレイヤー", font=('Arial', 9)).pack()
+        tk.Label(help_frame, text="・5つ並べると勝利", font=('Arial', 9)).pack()
         
         # 統計表示
         stats_frame = tk.Frame(self.right_frame)
@@ -260,11 +257,11 @@ class RandomVsAIGUI:
         self.total_games_label = tk.Label(stats_frame, text="総ゲーム数: 0", font=('Arial', 10))
         self.total_games_label.pack()
         
+        self.human_wins_label = tk.Label(stats_frame, text="人間勝利: 0 (0.0%)", font=('Arial', 10))
+        self.human_wins_label.pack()
+        
         self.ai_wins_label = tk.Label(stats_frame, text="AI勝利: 0 (0.0%)", font=('Arial', 10))
         self.ai_wins_label.pack()
-        
-        self.random_wins_label = tk.Label(stats_frame, text="ランダム勝利: 0 (0.0%)", font=('Arial', 10))
-        self.random_wins_label.pack()
         
         self.draws_label = tk.Label(stats_frame, text="引き分け: 0 (0.0%)", font=('Arial', 10))
         self.draws_label.pack()
@@ -275,17 +272,17 @@ class RandomVsAIGUI:
         
         tk.Label(detail_frame, text="詳細統計:", font=('Arial', 10, 'bold')).pack()
         
+        self.human_first_label = tk.Label(detail_frame, text="人間先手: 0勝", font=('Arial', 9))
+        self.human_first_label.pack()
+        
+        self.human_second_label = tk.Label(detail_frame, text="人間後手: 0勝", font=('Arial', 9))
+        self.human_second_label.pack()
+        
         self.ai_first_label = tk.Label(detail_frame, text="AI先手: 0勝", font=('Arial', 9))
         self.ai_first_label.pack()
         
         self.ai_second_label = tk.Label(detail_frame, text="AI後手: 0勝", font=('Arial', 9))
         self.ai_second_label.pack()
-        
-        self.random_first_label = tk.Label(detail_frame, text="ランダム先手: 0勝", font=('Arial', 9))
-        self.random_first_label.pack()
-        
-        self.random_second_label = tk.Label(detail_frame, text="ランダム後手: 0勝", font=('Arial', 9))
-        self.random_second_label.pack()
     
     def load_ai_model(self):
         """AIモデルを読み込む"""
@@ -307,19 +304,19 @@ class RandomVsAIGUI:
                 env=temp_env
             )
             
-            # MCTSプレイヤーの初期化（初期値として1000を使用）
+            # MCTSプレイヤーの初期化
             initial_playout = self.ai_playout_var.get()
             self.ai_player = MCTSPlayer(
                 self.policy_value_net.policy_value_fn,
                 c_puct=5,
-                n_playout=initial_playout,  # 初期値、後で動的に変更
+                n_playout=initial_playout,
                 is_selfplay=0
             )
             
             print(f"MCTSプレイヤー初期化完了: 初期プレイアウト回数 = {initial_playout}")
             
-            # ランダムプレイヤーの初期化
-            self.random_player = RandomPlayer(self.board_size)
+            # 人間プレイヤーの初期化
+            self.human_player = HumanPlayer(self.board_size)
             
             print("AIモデル読み込み完了")
             self.status_label.config(text="モデル読み込み完了")
@@ -332,6 +329,28 @@ class RandomVsAIGUI:
             traceback.print_exc()
             self.status_label.config(text="モデル読み込み失敗")
             messagebox.showerror("エラー", error_msg)
+    
+    def on_canvas_click(self, event):
+        """キャンバスクリックイベントハンドラー"""
+        if not self.game_running or not self.waiting_for_human or self.game_over:
+            return
+        
+        # クリック位置を盤面座標に変換
+        x = round((event.x - self.margin) / self.cell_size)
+        y = round((event.y - self.margin) / self.cell_size)
+        
+        # 盤面の範囲内かチェック
+        if 0 <= x < self.board_size and 0 <= y < self.board_size:
+            # そのマスが空いているかチェック
+            board = self.env.board.GetBoardInt()
+            if board[y][x] == 0:
+                # 人間の手を設定
+                self.human_player.set_move(x, y)
+                print(f"人間の手: ({x}, {y})")
+            else:
+                print(f"({x}, {y})は既に石が置かれています")
+        else:
+            print(f"クリック位置が盤面外です: ({x}, {y})")
     
     def draw_board(self):
         """ボードを描画する"""
@@ -376,218 +395,243 @@ class RandomVsAIGUI:
                                 x + radius, y + radius,
                                 fill='white', outline='black'
                             )
+        
+        # 最後に置かれた石をハイライト
+        if hasattr(self, 'last_move') and self.last_move is not None:
+            x, y = self.last_move
+            canvas_x = self.margin + x * self.cell_size
+            canvas_y = self.margin + y * self.cell_size
+            radius = self.cell_size // 4
+            self.canvas.create_oval(
+                canvas_x - radius, canvas_y - radius,
+                canvas_x + radius, canvas_y + radius,
+                outline='red', width=2, fill=''
+            )
     
     def start_game(self):
         """ゲームを開始する"""
-        if not self.ai_player or not self.random_player:
+        if not self.ai_player or not self.human_player:
             messagebox.showerror("エラー", "AIモデルが読み込まれていません")
             return
         
         self.game_running = True
-        self.start_button.config(state='disabled')
-        self.stop_button.config(state='normal')
+        self.game_over = False
+        self.waiting_for_human = False
+        self.human_player.reset_move()
+        self.last_move = None
         
-        # 新しいスレッドでゲームを実行
-        self.game_thread = threading.Thread(target=self.run_game_loop, daemon=True)
+        # プレイヤーの決定
+        self.human_is_first = (self.first_player_var.get() == "human")
+        
+        # 環境の初期化
+        self.env = GomokuEnv(board_size=self.board_size)
+        
+        # ボタンの状態更新
+        self.start_button.config(state='disabled')
+        self.reset_button.config(state='normal')
+        
+        # 盤面描画
+        self.draw_board()
+        
+        # ゲームスレッドを開始
+        self.game_thread = threading.Thread(target=self.run_game, daemon=True)
         self.game_thread.start()
     
-    def stop_game(self):
-        """ゲームを停止する"""
+    def reset_game(self):
+        """ゲームをリセットする"""
         self.game_running = False
+        self.game_over = False
+        self.waiting_for_human = False
+        self.human_player.reset_move()
+        self.last_move = None
+        
+        # ボタンの状態更新
         self.start_button.config(state='normal')
-        self.stop_button.config(state='disabled')
-        self.status_label.config(text="ゲーム停止")
-        self.turn_label.config(text="停止中...")
-    
-    def determine_first_player(self):
-        """先手プレイヤーを決定する"""
-        setting = self.first_player_var.get()
-        if setting == "alternating":
-            # 交互に切り替え
-            if self.total_games % 2 == 0:
-                return "random"
-            else:
-                return "ai"
-        else:
-            # 固定設定
-            return setting
+        self.reset_button.config(state='disabled')
+        
+        # 表示リセット
+        self.turn_label.config(text="リセット完了")
+        self.status_label.config(text="新しいゲームを開始してください")
+        
+        # 盤面クリア
+        if hasattr(self, 'env'):
+            self.env = None
+        self.draw_board()
     
     def reset_stats(self):
         """統計をリセットする"""
         self.ai_wins = 0
-        self.random_wins = 0
+        self.human_wins = 0
         self.draws = 0
         self.total_games = 0
-        self.current_first_player = "random"  # リセット時は初期値に戻す
         
         # 詳細統計もリセット
         self.ai_wins_as_first = 0
         self.ai_wins_as_second = 0
-        self.random_wins_as_first = 0
-        self.random_wins_as_second = 0
+        self.human_wins_as_first = 0
+        self.human_wins_as_second = 0
         
         self.update_stats()
     
-    def run_game_loop(self):
-        """ゲームループを実行する（別スレッド）"""
-        if self.continuous_var.get():
-            # 連続ゲームモード
-            while self.game_running:
-                try:
-                    self.play_single_game()
-                    if self.game_running:
-                        time.sleep(0.5)  # ゲーム間の短い間隔のみ残す
-                except Exception as e:
-                    print(f"ゲーム実行エラー: {str(e)}")
-                    traceback.print_exc()
-                    self.master.after(0, lambda: self.status_label.config(text="ゲームエラー"))
-                    break
-        else:
-            # 単発ゲームモード
-            try:
-                self.play_single_game()
-            except Exception as e:
-                print(f"ゲーム実行エラー: {str(e)}")
-                traceback.print_exc()
-                self.master.after(0, lambda: self.status_label.config(text="ゲームエラー"))
-            finally:
-                self.master.after(0, self.stop_game)
+    def run_game(self):
+        """ゲームを実行する（別スレッド）"""
+        try:
+            self.play_single_game()
+        except Exception as e:
+            print(f"ゲーム実行エラー: {str(e)}")
+            traceback.print_exc()
+            self.master.after(0, lambda: self.status_label.config(text="ゲームエラー"))
+        finally:
+            self.master.after(0, self.end_game)
     
     def play_single_game(self):
         """一回のゲームを実行する"""
         if not self.game_running:
             return
         
-        # 環境の初期化
-        self.env = GomokuEnv(board_size=self.board_size)
-        
-        # プレイヤーの決定（設定に応じて決定）
-        first_player_type = self.determine_first_player()
-        ai_is_first = (first_player_type == "ai")
-        
-        # 現在の先手プレイヤーを記録
-        self.current_first_player = first_player_type
-        
+        # ゲーム開始メッセージ
         self.master.after(0, lambda: self.turn_label.config(
-            text=f"ゲーム{self.total_games + 1} (先手: {'AI' if ai_is_first else 'ランダム'})"
+            text=f"ゲーム開始 (先手: {'人間' if self.human_is_first else 'AI'})"
         ))
-        self.master.after(0, self.draw_board)
         
-        game_over = False
         move_count = 0
         max_moves = self.board_size * self.board_size
         
-        while not game_over and self.game_running and move_count < max_moves:
-            current_player_is_ai = (ai_is_first and self.env.current_player == 1) or \
-                                 (not ai_is_first and self.env.current_player == 2)
+        while not self.game_over and self.game_running and move_count < max_moves:
+            current_player_is_human = (self.human_is_first and self.env.current_player == 1) or \
+                                    (not self.human_is_first and self.env.current_player == 2)
             
-            if current_player_is_ai:
+            if current_player_is_human:
+                # 人間の手番
+                self.waiting_for_human = True
+                self.human_player.reset_move()
+                self.master.after(0, lambda: self.turn_label.config(text="あなたの手番"))
+                self.master.after(0, lambda: self.status_label.config(text="盤面をクリックして石を置いてください"))
+                
+                # 人間の手を待機
+                while not self.human_player.move_ready and self.game_running:
+                    time.sleep(0.1)
+                
+                if not self.game_running:
+                    break
+                
+                action = self.human_player.get_action(None)
+                self.waiting_for_human = False
+                
+                if action is None:
+                    break
+                
+                player_name = "人間"
+                
+            else:
                 # AIの手番
-                self.master.after(0, lambda: self.turn_label.config(text="AIの思考中..."))
-                self.master.after(0, lambda: self.status_label.config(text="AI思考中"))
+                self.master.after(0, lambda: self.turn_label.config(text="AIの手番"))
+                self.master.after(0, lambda: self.status_label.config(text="AI思考中..."))
                 
                 # AI思考時間を動的に更新
-                if hasattr(self, 'ai_player'):
-                    playout_count = self.ai_playout_var.get()
-                    self.ai_player.n_playout = playout_count
-                    print(f"AI思考中: MCTSプレイアウト回数 = {playout_count}")
-                    self.master.after(0, lambda: self.status_label.config(text=f"AI思考中 (プレイアウト: {playout_count})"))
+                playout_count = self.ai_playout_var.get()
+                self.ai_player.n_playout = playout_count
+                print(f"AI思考中: MCTSプレイアウト回数 = {playout_count}")
                 
-                board = self.env.board.GetBoardInt()
                 action = self.ai_player.get_action(self.env)
                 
+                if action is None:
+                    break
+                
                 player_name = "AI"
-            else:
-                # ランダムプレイヤーの手番
-                self.master.after(0, lambda: self.turn_label.config(text="ランダムプレイヤーの手番"))
-                self.master.after(0, lambda: self.status_label.config(text="ランダム思考中"))
-                
-                board = self.env.board.GetBoardInt()
-                action = self.random_player.get_action(board)
-                
-                player_name = "ランダム"
-            
-            if action is None:
-                # 有効な手がない場合は引き分け
-                game_over = True
-                self.draws += 1
-                result = "引き分け"
-                break
             
             # 手を実行
             _, reward, done, _ = self.env.step(action)
             move_count += 1
             
+            # 最後の手を記録
+            self.last_move = action
+            
             # 盤面更新
             self.master.after(0, self.draw_board)
             
+            print(f"{player_name}の手: {action}")
+            
             if done:
-                game_over = True
                 # 勝者の判定
                 winner = 3 - self.env.current_player  # 前のプレイヤーが勝者
-                if (ai_is_first and winner == 1) or (not ai_is_first and winner == 2):
+                if (self.human_is_first and winner == 1) or (not self.human_is_first and winner == 2):
+                    self.human_wins += 1
+                    if self.human_is_first:
+                        self.human_wins_as_first += 1
+                    else:
+                        self.human_wins_as_second += 1
+                    result = "人間の勝利！"
+                else:
                     self.ai_wins += 1
-                    if ai_is_first:
+                    if not self.human_is_first:
                         self.ai_wins_as_first += 1
                     else:
                         self.ai_wins_as_second += 1
-                    result = "AI勝利"
-                else:
-                    self.random_wins += 1
-                    if not ai_is_first:
-                        self.random_wins_as_first += 1
-                    else:
-                        self.random_wins_as_second += 1
-                    result = "ランダム勝利"
-            
-            # 手番の遅延を削除 - MCTSが完了するまで待機
-            # if self.game_running:
-            #     time.sleep(self.speed_var.get())
+                    result = "AIの勝利！"
+                
+                self.game_over = True
+                self.total_games += 1
+                
+                self.master.after(0, lambda: self.turn_label.config(text=f"ゲーム終了"))
+                self.master.after(0, lambda: self.status_label.config(text=result))
+                self.master.after(0, self.update_stats)
+                
+                # 結果をメッセージボックスで表示
+                self.master.after(0, lambda: messagebox.showinfo("ゲーム終了", result))
+                
+                break
         
-        # ゲーム終了処理
-        if self.game_running:
-            if move_count >= max_moves and not game_over:
-                self.draws += 1
-                result = "引き分け（最大手数）"
-            
+        # 最大手数に達した場合
+        if move_count >= max_moves and not self.game_over:
+            self.draws += 1
             self.total_games += 1
+            result = "引き分け"
             
-            self.master.after(0, lambda: self.turn_label.config(text=f"ゲーム終了: {result}"))
-            self.master.after(0, lambda: self.status_label.config(text=f"結果: {result}"))
+            self.master.after(0, lambda: self.turn_label.config(text="ゲーム終了"))
+            self.master.after(0, lambda: self.status_label.config(text=result))
             self.master.after(0, self.update_stats)
+            self.master.after(0, lambda: messagebox.showinfo("ゲーム終了", result))
+    
+    def end_game(self):
+        """ゲーム終了処理"""
+        self.game_running = False
+        self.waiting_for_human = False
+        self.start_button.config(state='normal')
+        self.reset_button.config(state='disabled')
     
     def update_stats(self):
         """統計表示を更新する"""
         self.total_games_label.config(text=f"総ゲーム数: {self.total_games}")
         
         if self.total_games > 0:
+            human_percentage = (self.human_wins / self.total_games) * 100
             ai_percentage = (self.ai_wins / self.total_games) * 100
-            random_percentage = (self.random_wins / self.total_games) * 100
             draw_percentage = (self.draws / self.total_games) * 100
             
+            self.human_wins_label.config(text=f"人間勝利: {self.human_wins} ({human_percentage:.1f}%)")
             self.ai_wins_label.config(text=f"AI勝利: {self.ai_wins} ({ai_percentage:.1f}%)")
-            self.random_wins_label.config(text=f"ランダム勝利: {self.random_wins} ({random_percentage:.1f}%)")
             self.draws_label.config(text=f"引き分け: {self.draws} ({draw_percentage:.1f}%)")
             
             # 詳細統計も更新
+            self.human_first_label.config(text=f"人間先手: {self.human_wins_as_first}勝")
+            self.human_second_label.config(text=f"人間後手: {self.human_wins_as_second}勝")
             self.ai_first_label.config(text=f"AI先手: {self.ai_wins_as_first}勝")
             self.ai_second_label.config(text=f"AI後手: {self.ai_wins_as_second}勝")
-            self.random_first_label.config(text=f"ランダム先手: {self.random_wins_as_first}勝")
-            self.random_second_label.config(text=f"ランダム後手: {self.random_wins_as_second}勝")
         else:
+            self.human_wins_label.config(text="人間勝利: 0 (0.0%)")
             self.ai_wins_label.config(text="AI勝利: 0 (0.0%)")
-            self.random_wins_label.config(text="ランダム勝利: 0 (0.0%)")
             self.draws_label.config(text="引き分け: 0 (0.0%)")
             
             # 詳細統計も初期化
+            self.human_first_label.config(text="人間先手: 0勝")
+            self.human_second_label.config(text="人間後手: 0勝")
             self.ai_first_label.config(text="AI先手: 0勝")
             self.ai_second_label.config(text="AI後手: 0勝")
-            self.random_first_label.config(text="ランダム先手: 0勝")
-            self.random_second_label.config(text="ランダム後手: 0勝")
 
 def main():
     root = tk.Tk()
-    app = RandomVsAIGUI(root)
+    app = HumanVsAIGUI(root)
     
     def on_closing():
         app.game_running = False

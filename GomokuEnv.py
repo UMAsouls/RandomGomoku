@@ -30,7 +30,7 @@ class GomokuEnv:
             reward = torch.tensor(0.0, device=self.device)
             done = True
             board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
-            return board_tensor, reward, done, {"invalid_action": True}
+            return board_tensor, reward, done, {"invalid_action": True, "which_player": -1}
             
         x, y = action
         if self.board.GetBoardInt()[y][x] != 0:
@@ -40,7 +40,7 @@ class GomokuEnv:
             reward = torch.tensor(0.0, device=self.device)
             done = True
             board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
-            return board_tensor, reward, done, {"invalid_action": True}
+            return board_tensor, reward, done, {"invalid_action": True, "which_player": -1}
 
         self.lastmove = action
 
@@ -67,8 +67,10 @@ class GomokuEnv:
             # self.board.PrintBoard()
             if self.current_player == self.train_player:
                 reward += 1.0  # 黒が勝った
+                return board_tensor, reward, done, {"win_player": self.current_player}
             else:
                 reward += -1.0  # 白が勝った
+                return board_tensor, reward, done, {"win_player": self.current_player}
         else:
             reward += 0.0
 
@@ -81,7 +83,7 @@ class GomokuEnv:
 
         # 盤面をPyTorchテンソルに変換してGPUに転送
         # board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
-        return board_tensor, reward, done, {"which_player":now_player}
+        return board_tensor, reward, done, {"win_player":-1}
 
     def get_human_action(self):
         while True:
