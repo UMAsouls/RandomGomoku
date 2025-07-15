@@ -29,9 +29,8 @@ class GomokuEnv:
             # 無効なアクション：Noneが渡された
             reward = torch.tensor(0.0, device=self.device)
             done = True
-            board_array = self.board.GetBoardInt()
-            board_tensor = torch.tensor(board_array, dtype=torch.float32, device=self.device).unsqueeze(0)  # チャンネル次元を追加
-            return board_tensor, reward, done, {"invalid_action": True}
+            board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+            return board_tensor, reward, done, {"invalid_action": True, "which_player": -1}
             
         x, y = action
         if self.board.GetBoardInt()[y][x] != 0:
@@ -40,9 +39,8 @@ class GomokuEnv:
             # エラーを投げる代わりに引き分けとして扱う
             reward = torch.tensor(0.0, device=self.device)
             done = True
-            board_array = self.board.GetBoardInt()
-            board_tensor = torch.tensor(board_array, dtype=torch.float32, device=self.device).unsqueeze(0)  # チャンネル次元を追加
-            return board_tensor, reward, done, {"invalid_action": True}
+            board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+            return board_tensor, reward, done, {"invalid_action": True, "which_player": -1}
 
         self.lastmove = action
 
@@ -57,8 +55,8 @@ class GomokuEnv:
 
         # 石の数が正常かチェック
         if not (self.blackStones - self.whiteStones == 1 or self.blackStones == self.whiteStones):
-            # print(self.blackStones)
-            # print(self.whiteStones)
+            print(self.blackStones)
+            print(self.whiteStones)
             raise ValueError("石の数がおかしいです")
 
         # 報酬の初期設定
@@ -68,9 +66,15 @@ class GomokuEnv:
         if done:
             # self.board.PrintBoard()
             if self.current_player == self.train_player:
+                board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+                
                 reward += 1.0  # 黒が勝った
+                return board_tensor, reward, done, {"win_player": self.current_player}
             else:
+                board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+                
                 reward += -1.0  # 白が勝った
+                return board_tensor, reward, done, {"win_player": self.current_player}
         else:
             reward += 0.0
 
@@ -82,9 +86,8 @@ class GomokuEnv:
 
 
         # 盤面をPyTorchテンソルに変換してGPUに転送
-        board_array = self.board.GetBoardInt()
-        board_tensor = torch.tensor(board_array, dtype=torch.float32, device=self.device).unsqueeze(0)  # チャンネル次元を追加
-        return board_tensor, reward, done, {"which_player":now_player}
+        board_tensor = torch.tensor(self.board.GetBoardInt(), dtype=torch.float32, device=self.device)
+        return board_tensor, reward, done, {"win_player":-1}
 
     def get_human_action(self):
         while True:
