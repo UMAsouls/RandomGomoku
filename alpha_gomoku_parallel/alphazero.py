@@ -109,14 +109,18 @@ class AlphaZero:
         self.data_augmentation_executor = ThreadPoolExecutor(max_workers=self.num_cpu_workers)
         
         # モデルの初期化
+        # GPU使用設定
+        use_gpu = torch.cuda.is_available()
+        print(f"GPU使用可能: {use_gpu}")
+        
         # policy_value_netを初期化 (PolicyValueNetはポリシーとバリューネットワークを統合したクラスと仮定)
-        self.policy_value_net = PolicyValueNet(self.board_size,env=self.env)
+        self.policy_value_net = PolicyValueNet(self.board_size, env=self.env, use_gpu=use_gpu)
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                        c_puct=self.c_puct, n_playout=self.n_playout,
                                        is_selfplay=True)
         
         # GPU使用率を制限するための設定
-        if torch.cuda.is_available():
+        if use_gpu:
             # GPUメモリの使用量を制限
             torch.cuda.set_per_process_memory_fraction(0.8)  # 80%に制限
             torch.cuda.empty_cache()
@@ -365,7 +369,7 @@ class AlphaZero:
                                          n_playout=self.n_playout + 20,  # わずかに多く探索
                                          is_selfplay=False)
         # 最善のポリシーをロードしてMCTSプレイヤーを作成
-        best_policy = PolicyValueNet(self.board_size, env=self.env)
+        best_policy = PolicyValueNet(self.board_size, env=self.env, use_gpu=torch.cuda.is_available())
         try:
             # 最善のモデルをロード
             import os

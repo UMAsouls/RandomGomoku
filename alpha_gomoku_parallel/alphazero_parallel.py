@@ -80,7 +80,7 @@ def parallel_selfplay_game(args):
     try:
         # 各プロセスで独立したネットワークを作成
         env = GomokuEnv(board_size=board_size)
-        policy_value_net = PolicyValueNet(board_size, env=env)
+        policy_value_net = PolicyValueNet(board_size, env=env, use_gpu=False)  # プロセス間ではCPUを使用
         
         # ネットワークの重みを設定
         policy_value_net.policy_value_net.load_state_dict(network_weights)
@@ -184,7 +184,8 @@ class AlphaZeroParallel:
         self.game_process_pool = ProcessPoolExecutor(max_workers=self.parallel_games)
         
         # モデルの初期化
-        self.policy_value_net = PolicyValueNet(self.board_size, env=self.env)
+        use_gpu = torch.cuda.is_available()
+        self.policy_value_net = PolicyValueNet(self.board_size, env=self.env, use_gpu=use_gpu)
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                      c_puct=self.c_puct, n_playout=self.n_playout,
                                      is_selfplay=True)
@@ -342,14 +343,7 @@ class AlphaZeroParallel:
         if len(state_batch.shape) == 2:
             state_batch = state_batch.reshape(-1, 4, self.board_size, self.board_size)
         
-        # GPU使用時はデータをGPUに移動
-        if self.gpu_available:
-            device = torch.device('cuda:0')
-            state_batch = torch.FloatTensor(state_batch).to(device)
-            mcts_probs_batch = torch.FloatTensor(mcts_probs_batch).to(device)
-            winner_batch = torch.FloatTensor(winner_batch).to(device)
-        
-        # 更新前のポリシーとバリューを取得
+        # 更新前のポリシーとバリューを取得（NumPy配列のまま）
         old_probs, old_v = self.policy_value_net.policy_value(state_batch)
         
         # エポック数だけトレーニングを繰り返す
@@ -362,20 +356,9 @@ class AlphaZeroParallel:
             
             new_probs, new_v = self.policy_value_net.policy_value(state_batch)
             
-            # KLダイバージェンスを計算
-            if self.gpu_available:
-                old_probs_cpu = old_probs.cpu().numpy()
-                new_probs_cpu = new_probs.cpu().numpy()
-                new_v_cpu = new_v.cpu().numpy()
-                winner_batch_cpu = winner_batch.cpu().numpy()
-            else:
-                old_probs_cpu = old_probs
-                new_probs_cpu = new_probs
-                new_v_cpu = new_v
-                winner_batch_cpu = winner_batch
-            
-            kl = np.mean(np.sum(old_probs_cpu * (
-                np.log(old_probs_cpu + 1e-10) - np.log(new_probs_cpu + 1e-10)),
+            # KLダイバージェンスを計算（CPUで実行）
+            kl = np.mean(np.sum(old_probs * (
+                np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)),
                 axis=1))
             
             if kl > self.kl_targ * 4:
@@ -497,7 +480,7 @@ class AlphaZeroParallel:
                                         is_selfplay=False)
         
         # 最善モデルをロード
-        best_policy = PolicyValueNet(self.board_size, env=self.env)
+        best_policy = PolicyValueNet(self.board_size, env=self.env, use_gpu=torch.cuda.is_available())
         try:
             if os.path.exists('./best_policy_parallel.model'):
                 best_policy.load_model('./best_policy_parallel.model')

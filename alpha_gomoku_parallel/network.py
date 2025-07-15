@@ -55,10 +55,13 @@ class PolicyValueNet():
     """ポリシー・バリューネットワーク"""
     def __init__(self, board_size,
                  model_file=None, use_gpu=False,env:GomokuEnv=None):
-        self.use_gpu = use_gpu
+        self.use_gpu = use_gpu and torch.cuda.is_available()
         self.board_size = board_size
         self.l2_const = 1e-4  # L2ペナルティの係数
         self.env = env
+        
+        # デバイス設定
+        self.device = torch.device('cuda' if self.use_gpu else 'cpu')
         
         # CPUワーカーの数を設定
         self.num_cpu_workers = 4
@@ -66,10 +69,8 @@ class PolicyValueNet():
         self.cpu_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.num_cpu_workers)
         
         # ポリシー・バリューネットワークモジュール
-        if self.use_gpu:
-            self.policy_value_net = Net(board_size, board_size).cuda()
-        else:
-            self.policy_value_net = Net(board_size, board_size)
+        self.policy_value_net = Net(board_size, board_size).to(self.device)
+        
         # オプティマイザ
         self.optimizer = optim.Adam(self.policy_value_net.parameters(),
                                     weight_decay=self.l2_const)
@@ -149,24 +150,15 @@ class PolicyValueNet():
         
         # バッチごとに処理
         for batch_data in dataloader:
-            batch_tensor = batch_data[0]
-            
-            if self.use_gpu:
-                batch_tensor = Variable(batch_tensor.cuda())
-            else:
-                batch_tensor = Variable(batch_tensor)
+            batch_tensor = batch_data[0].to(self.device)
             
             # GPU推論
             with torch.no_grad():
                 log_act_probs, value = self.policy_value_net(batch_tensor)
             
             # CPUで後処理
-            if self.use_gpu:
-                act_probs = np.exp(log_act_probs.cpu().numpy())
-                value_np = value.cpu().numpy()
-            else:
-                act_probs = np.exp(log_act_probs.numpy())
-                value_np = value.numpy()
+            act_probs = np.exp(log_act_probs.cpu().numpy())
+            value_np = value.cpu().numpy()
             
             all_act_probs.append(act_probs)
             all_values.append(value_np)
@@ -193,39 +185,30 @@ class PolicyValueNet():
         current_state = np.ascontiguousarray(current_state.reshape(
                 -1, 4, self.board_size, self.board_size))
         
-        if self.use_gpu:
-            state_tensor = Variable(torch.from_numpy(current_state).cuda().float())
-        else:
-            state_tensor = Variable(torch.from_numpy(current_state).float())
+        state_tensor = torch.from_numpy(current_state).float().to(self.device)
         
         # GPU推論
         with torch.no_grad():
             log_act_probs, value = self.policy_value_net(state_tensor)
         
         # CPUで後処理
-        if self.use_gpu:
-            act_probs = np.exp(log_act_probs.cpu().numpy().flatten())
-            value = value.cpu().numpy()[0][0]
-        else:
-            act_probs = np.exp(log_act_probs.numpy().flatten())
-            value = value.numpy()[0][0]
+        act_probs = np.exp(log_act_probs.cpu().numpy().flatten())
+        value = value.cpu().numpy()[0][0]
         
         act_probs = zip(legal_positions, act_probs[legal_positions])
         return act_probs, value
     def train_step(self, state_batch, mcts_probs, winner_batch, lr):
         """学習を1ステップ実行します"""
-        # CPUでデータ前処理
-        if isinstance(mcts_probs, list):
-            mcts_probs = np.array(mcts_probs)
-        if isinstance(winner_batch, list):
-            winner_batch = np.array(winner_batch)
-        
+        # NumPy配列をTensorに変換
+        if isinstance(state_batch, np.ndarray):
+            state_batch = torch.FloatTensor(state_batch)
+        if isinstance(mcts_probs, np.ndarray):
+            mcts_probs = torch.FloatTensor(mcts_probs)
+        if isinstance(winner_batch, np.ndarray):
+            winner_batch = torch.FloatTensor(winner_batch)
+            
         # DataLoaderを使用してバッチ処理を効率化
-        dataset = TensorDataset(
-            torch.FloatTensor(state_batch),
-            torch.FloatTensor(mcts_probs),
-            torch.FloatTensor(winner_batch)
-        )
+        dataset = TensorDataset(state_batch, mcts_probs, winner_batch)
         dataloader = DataLoader(dataset, batch_size=min(128, len(state_batch)), shuffle=True)
         
         # パラメータの勾配をゼロに設定
@@ -239,14 +222,9 @@ class PolicyValueNet():
         
         for batch_states, batch_mcts_probs, batch_winners in dataloader:
             # GPU転送
-            if self.use_gpu:
-                batch_states = Variable(batch_states.cuda())
-                batch_mcts_probs = Variable(batch_mcts_probs.cuda())
-                batch_winners = Variable(batch_winners.cuda())
-            else:
-                batch_states = Variable(batch_states)
-                batch_mcts_probs = Variable(batch_mcts_probs)
-                batch_winners = Variable(batch_winners)
+            batch_states = batch_states.to(self.device)
+            batch_mcts_probs = batch_mcts_probs.to(self.device)
+            batch_winners = batch_winners.to(self.device)
 
             # 順伝播
             log_act_probs, value = self.policy_value_net(batch_states)
@@ -284,11 +262,7 @@ class PolicyValueNet():
         
     def load_model(self, model_file):
         """モデルのパラメータをファイルから読み込みます"""
-        if self.use_gpu:
-            device = 'cuda'
-        else:
-            device = 'cpu'
-        net_params = torch.load(model_file, map_location=device)
+        net_params = torch.load(model_file, map_location=self.device)
         self.policy_value_net.load_state_dict(net_params)
         print(f"モデルをロードしました: {model_file}")
-        print(f"モデルをロードしました: {model_file}")
+        print(f"デバイス: {self.device}")

@@ -15,6 +15,10 @@ def main():
     
     print("並列処理版AlphaZeroを開始します...")
     
+    # デバイス情報を表示
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"使用デバイス: {device}")
+    
     # リソースマネージャーを初期化
     resource_manager = ResourceManager()
     
@@ -30,6 +34,8 @@ def main():
         print("\n\rユーザーによる中断を検出しました。")
     except Exception as e:
         print(f"エラーが発生しました: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         # リソースのクリーンアップ
         coordinator.cleanup_executors()

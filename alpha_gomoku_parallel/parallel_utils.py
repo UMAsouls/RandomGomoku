@@ -53,6 +53,10 @@ class ResourceManager:
             self.optimal_training_batch_size = 64
             self.optimal_gpu_batch_size = 32
             self.use_gpu_for_training = True
+            # GPU使用時はメモリ制限を設定
+            if self.gpu_count > 0:
+                torch.cuda.set_per_process_memory_fraction(0.8)
+                torch.cuda.empty_cache()
         else:
             self.optimal_training_batch_size = 32
             self.optimal_gpu_batch_size = 16
@@ -106,8 +110,12 @@ class PerformanceMonitor:
         self.memory_usage.append(memory_percent)
         
         if torch.cuda.is_available():
-            gpu_memory = torch.cuda.memory_allocated() / torch.cuda.max_memory_allocated()
-            self.gpu_usage.append(gpu_memory)
+            try:
+                gpu_memory = torch.cuda.memory_allocated() / torch.cuda.max_memory_allocated()
+                self.gpu_usage.append(gpu_memory)
+            except:
+                # GPUメモリが初期化されていない場合
+                self.gpu_usage.append(0.0)
     
     def print_performance_summary(self):
         """パフォーマンスサマリーを表示"""

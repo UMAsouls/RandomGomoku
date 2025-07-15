@@ -41,7 +41,8 @@ class AlphaZeroSequential:
         self.best_win_ratio = 0.0
         
         # モデルの初期化
-        self.policy_value_net = PolicyValueNet(self.board_size, env=self.env)
+        use_gpu = torch.cuda.is_available()
+        self.policy_value_net = PolicyValueNet(self.board_size, env=self.env, use_gpu=use_gpu)
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                      c_puct=self.c_puct, n_playout=self.n_playout,
                                      is_selfplay=True)
