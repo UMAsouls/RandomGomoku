@@ -316,6 +316,7 @@ class AlphaZero:
         自己対戦データの収集、ポリシーの更新、モデルの評価を繰り返します。
         """
         try:
+            import time
             # トレーニング開始時に初期の最善モデルを保存（存在しない場合）
             import os
             if not os.path.exists('./best_policy.model'):
@@ -325,18 +326,34 @@ class AlphaZero:
             
             # 指定されたゲームバッチ数だけトレーニングサイクルを繰り返す
             for i in range(self.game_batch_num):
+                cycle_start_time = time.time()
+                
                 # 自己対戦データを収集する
+                selfplay_start = time.time()
                 self.collect_selfplay_data(self.play_batch_size)
-                print(f"ゲーム {i+1}/{self.game_batch_num} 完了。")
+                selfplay_time = time.time() - selfplay_start
+                
+                print(f"ゲーム {i+1}/{self.game_batch_num} 完了。自己対戦時間: {selfplay_time:.2f}秒")
                 
                 # バッファに十分なデータが溜まったらポリシーを更新する
                 if len(self.date_buffer) >= self.batch_size:
+                    update_start = time.time()
                     loss, entropy = self.policy_update()
+                    update_time = time.time() - update_start
+                    print(f"ポリシー更新時間: {update_time:.2f}秒")
                     self.save_loss_graph()
+                
+                cycle_time = time.time() - cycle_start_time
+                print(f"サイクル {i+1} 合計時間: {cycle_time:.2f}秒")
+                print("-" * 50)
+                
                 # 一定の頻度で現在のモデルを評価する
                 if (i+1) % self.check_freq == 0:
                     print(f"現在の自己対戦バッチ: {i+1}")
+                    eval_start = time.time()
                     win_ratio = self.policy_evaluate()
+                    eval_time = time.time() - eval_start
+                    print(f"モデル評価時間: {eval_time:.2f}秒")
                     # 現在のポリシーを保存
                     self.policy_value_net.save_model('./current_policy.model')
                     

@@ -223,10 +223,10 @@ class MCTS(object):
         else:
             acts, visits = zip(*act_visits)
             act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
-        print(f"探索回数: {sum(visits)}")
-        print(f"有効な手の数: {len(acts)}")
-        print(f"有効な手の位置: {acts}")
-        print(f"有効な手の確率: {act_probs}")
+        # print(f"探索回数: {sum(visits)}")
+        # print(f"有効な手の数: {len(acts)}")
+        # print(f"有効な手の位置: {acts}")
+        # print(f"有効な手の確率: {act_probs}")
         return acts, act_probs
     
     def get_legal_positions(self, board_size, board: Board):
