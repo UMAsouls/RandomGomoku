@@ -91,7 +91,7 @@ class Game(object):
         
         # ゲーム終了処理
         if done:
-            winner = info.get('which_player', 0) #先手：1, 後手：2
+            winner = info.get('win_player', 0) #先手：1, 後手：2
             
             self.env.board.PrintBoard()
             if is_shown:
