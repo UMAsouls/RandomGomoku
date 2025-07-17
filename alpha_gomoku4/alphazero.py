@@ -26,7 +26,7 @@ import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import threading
 
-BOARD_SIZE = 8  # ボードサイズ
+BOARD_SIZE = 6  # ボードサイズ
 N_IN_ROW = 5 # 勝利条件（連続する石の数）
 
 def parallel_data_augmentation(args):
