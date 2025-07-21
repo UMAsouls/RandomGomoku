@@ -1,33 +1,61 @@
 import concurrent.futures
+import time
+import os
 from alphazero import AlphaZero
+
+# --- `ProcessPoolExecutor`で呼び出すためのトップレベル関数 ---
+# 独立したプロセスで自己対戦を実行します。
+# 必要なパラメータは引数として渡します。
+def run_self_play_process(board_size, policy_value_fn, c_puct, n_playout, temp):
+    """
+    独立したプロセスで自己対戦を実行する関数。
+    """
+    from GomokuEnv import GomokuEnv
+    from game import Game
+    from mcts import MCTSPlayer
+    from network import PolicyValueNet
+
+    env = GomokuEnv(board_size=board_size)
+    # モデルをロードし、envを渡す
+    policy_value_net = PolicyValueNet(board_size, env=env)
+    policy_value_net.load_model('./current_policy.model')
+    policy_value_fn = policy_value_net.policy_value_fn
+
+    game = Game(env, board_size=board_size)
+    mcts_player = MCTSPlayer(policy_value_fn,
+                             c_puct=c_puct,
+                             n_playout=n_playout,
+                             is_selfplay=True)
+    winner, play_data = game.start_self_play(mcts_player, temp=temp)
+    return winner, play_data
+
 
 class ParallelAlphaZero(AlphaZero):
     def collect_selfplay_data_parallel(self, num_games):
         """
         複数試合を並列で自己対戦し、データを収集して拡張する。
-        各試合ごとに独立したGomokuEnv/Gameを使う。
+        【変更点】ThreadPoolExecutorからProcessPoolExecutorに変更し、真の並列処理を実現。
         """
-        from GomokuEnv import GomokuEnv
-        from game import Game
-        from mcts import MCTSPlayer
         play_data_list = []
 
-        def run_self_play():
-            # 各スレッドで独立した環境・ゲーム・MCTSPlayerを生成
-            env = GomokuEnv(board_size=self.board_size)
-            game = Game(env, board_size=self.board_size)
-            mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
-                                     c_puct=self.c_puct, n_playout=self.n_playout,
-                                     is_selfplay=True)
-            winner, play_data = game.start_self_play(mcts_player, temp=self.temp)
-            return winner, play_data
+        # ProcessPoolExecutorを使い、CPUコアを最大限活用します。
+        with concurrent.futures.ProcessPoolExecutor(max_workers=self.play_batch_size) as executor:
+            # policy_value_fnは渡さず、サブプロセスでモデルをロードする
+            futures = [executor.submit(run_self_play_process,
+                                       self.board_size,
+                                       None,  # policy_value_fnは使わない
+                                       self.c_puct,
+                                       self.n_playout,
+                                       self.temp) for _ in range(num_games)]
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.play_batch_size) as executor:
-            futures = [executor.submit(run_self_play) for _ in range(num_games)]
             for future in concurrent.futures.as_completed(futures):
-                winner, play_data = future.result()
-                play_data = list(play_data)[:]
-                play_data_list.extend(play_data)
+                try:
+                    winner, play_data = future.result()
+                    play_data = list(play_data)[:]
+                    play_data_list.extend(play_data)
+                except Exception as e:
+                    print(f"自己対戦プロセスでエラーが発生しました: {e}")
+
         # データ拡張
         extended_data = self.get_equi_data(play_data_list)
         self.date_buffer.extend(extended_data)
@@ -36,8 +64,6 @@ class ParallelAlphaZero(AlphaZero):
         """
         並列で複数試合を行い、まとめて学習するトレーニングパイプライン。
         """
-        import time
-        import os
         if not os.path.exists('./best_policy.model'):
             print("初期の最善ポリシーモデルを保存しています...")
             self.policy_value_net.save_model('./best_policy.model')
@@ -77,6 +103,7 @@ class ParallelAlphaZero(AlphaZero):
                     self.best_win_ratio = win_ratio
                     self.policy_value_net.save_model('./best_policy.model')
 
+# ProcessPoolExecutorを安全に使うために、メインの処理は必ずこの中に書きます。
 if __name__ == "__main__":
     # 並列AlphaZeroのインスタンス化
     agent = ParallelAlphaZero()

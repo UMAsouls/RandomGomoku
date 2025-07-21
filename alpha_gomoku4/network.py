@@ -290,5 +290,5 @@ class PolicyValueNet():
             device = 'cpu'
         net_params = torch.load(model_file, map_location=device)
         self.policy_value_net.load_state_dict(net_params)
-        print(f"モデルをロードしました: {model_file}")
-        print(f"モデルをロードしました: {model_file}")
+        # print(f"モデルをロードしました: {model_file}")
+        # print(f"モデルをロードしました: {model_file}")

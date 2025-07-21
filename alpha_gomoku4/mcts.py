@@ -241,7 +241,7 @@ class MCTS(object):
             for x in range(board_size):
                 if state[y][x] == 0:
                     legal_positions.append(x + y * board_size)
-        print("legal_positions", legal_positions)
+        # print("legal_positions", legal_positions)
         board.PrintBoard()
         return legal_positions
     
@@ -265,7 +265,7 @@ class MCTSPlayer(object):
                  c_puct=5, n_playout=2000, is_selfplay=0):
         self.mcts = MCTS(policy_value_function, c_puct, n_playout)
         self._is_selfplay = is_selfplay
-        print("MCTSPlayer initialized with c_puct={}, n_playout={}".format(c_puct, n_playout))
+        # print("MCTSPlayer initialized with c_puct={}, n_playout={}".format(c_puct, n_playout))
 
     def set_player_ind(self, p):
         self.player = p
@@ -320,7 +320,7 @@ class MCTSPlayer(object):
             else:
                 return move
         else:
-            print("WARNING: the board is full")
+            # print("WARNING: the board is full")
             # ボードが満杯の場合は適切な値を返す
             if return_prob:
                 return None, move_probs

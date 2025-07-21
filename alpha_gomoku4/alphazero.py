@@ -93,7 +93,7 @@ class AlphaZero:
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
         self.date_buffer = deque(maxlen=self.buffer_size)  # 経験再生バッファ
-        self.play_batch_size = 8  # 自己対戦の並列実行数
+        self.play_batch_size = 16  # 自己対戦の並列実行数
         self.epochs =20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
         self.check_freq = 50 # モデル評価の頻度（100ゲームごと）

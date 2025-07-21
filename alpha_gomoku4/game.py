@@ -123,16 +123,16 @@ class Game(object):
         
         while True:
             #勝ち確定の場合、勝利扱いにする
-            # if  self.is_winning(self.env):
-            #     winner = self.env.current_player
-            #     print(f"Game Over: Player {winner} wins")
-            #     print(f"早期終了盤面")
-            #     self.env.board.PrintBoard()
-            #     winners_z = np.zeros(len(current_players))
-            #     winners_z[np.array(current_players) == winner] = 1.0
-            #     winners_z[np.array(current_players) != winner] = -1.0
-            #     player.reset_player()
-            #     return winners_z, zip(states, mcts_probs, winners_z)
+            if  self.is_winning(self.env):
+                winner = self.env.current_player
+                # print(f"Game Over: Player {winner} wins")
+                # print(f"早期終了盤面")
+                # self.env.board.PrintBoard()
+                winners_z = np.zeros(len(current_players))
+                winners_z[np.array(current_players) == winner] = -1.0
+                winners_z[np.array(current_players) != winner] = 1.0
+                player.reset_player()
+                return winners_z, zip(states, mcts_probs, winners_z)
             move, mcts_prob = player.get_action(self.env, temp=temp, return_prob=True)
             
             # ボードが満杯で有効な手がない場合の処理
@@ -155,27 +155,27 @@ class Game(object):
             # print(self.env.current_player)
             
             _,reward,done,info= self.env.step(move)
-            self.env.board.PrintBoard()
+            # self.env.board.PrintBoard()
             if done:
                 winner = info.get('win_player', 0)
                 # winner = 3- winner  
-                print(f"Game Over: Player {winner} wins with reward {reward}")
+                # print(f"Game Over: Player {winner} wins with reward {reward}")
                 winners_z = np.zeros(len(current_players))
                 if winner != 0:
-                    print(f"Winner: Player {winner}")
-                    print(f"Current Players: {current_players}")
-                    print(f"winners_z: {len(winners_z)}")
-                    print(f"len(current_players): {len(current_players)}")
-                    print(f"len(states): {len(states)}")
+                    # print(f"Winner: Player {winner}")
+                    # print(f"Current Players: {current_players}")
+                    # print(f"winners_z: {len(winners_z)}")
+                    # print(f"len(current_players): {len(current_players)}")
+                    # print(f"len(states): {len(states)}")
                     winners_z[np.array(current_players) == winner] = 1.0
                     winners_z[np.array(current_players) != winner] = -1.0
                     # print(f"winners_z: {winners_z}")
                 player.reset_player()
-                print("返り値チェック")
-                print("winner:", winner)
-                print("states:", states[len(states)-1])
-                # print("mcts_probs:", mcts_probs)
-                print("winners_z:", winners_z)
+                # print("返り値チェック")
+                # print("winner:", winner)
+                # print("states:", states[len(states)-1])
+                # # print("mcts_probs:", mcts_probs)
+                # print("winners_z:", winners_z)
                 return winners_z, zip(states, mcts_probs, winners_z)
     def make_state(self, board_array:list[list[int]]):
         """return the board state from the perspective of the current player.
@@ -210,7 +210,7 @@ class Game(object):
     def is_winning(self, env:GomokuEnv):
         """Check if the current player has won or is guaranteed to win in 1 or 2 moves."""
         board_array = env.board.GetBoardInt()
-        print(f"盤面チェック: {board_array}")
+        # print(f"盤面チェック: {board_array}")
         current_player = env.current_player
         opponent = 2 if current_player == 1 else 1
         empty_cells = [(y, x) for y in range(self.board_size) for x in range(self.board_size) if board_array[y][x] == 0]
@@ -219,25 +219,30 @@ class Game(object):
             board_array[y][x] = current_player
             if self.CheckWin(x, y, current_player, N_IN_ROW, board_array):
                 board_array[y][x] = 0
-                print(f"1手で勝てる場所: ({y}, {x})")
                 return True
-            board_array[y][x] = 0  # 元に戻す
+            board_array[y][x] = 0
+
+        # まず、相手が次の一手で勝てるかどうかをチェック
+        for oy, ox in empty_cells:
+            board_array[oy][ox] = opponent
+            if self.CheckWin(ox, oy, opponent, N_IN_ROW, board_array):
+                board_array[oy][ox] = 0
+                # 相手が次で勝てるなら自分の2手勝ちは成立しない
+                return False
+            board_array[oy][ox] = 0
+
         # 2手で、相手がどこに妨害しても勝てるか（ダブルリーチ）効率化
         for idx1 in range(len(empty_cells)):
             y1, x1 = empty_cells[idx1]
             board_array[y1][x1] = current_player
-            # 1手目を仮置きした後の空きマス
             next_empty = [(y, x) for (y, x) in empty_cells if (y, x) != (y1, x1)]
-            # 2手目で勝てる場所（リーチリスト）
             win_next = []
             for y2, x2 in next_empty:
                 board_array[y2][x2] = current_player
                 if self.CheckWin(x2, y2, current_player, N_IN_ROW, board_array):
                     win_next.append((y2, x2))
                 board_array[y2][x2] = 0
-            # リーチが2つ以上ならダブルリーチ
             if len(win_next) >= 2:
-                # 妨害候補はリーチリストのみ
                 guaranteed = True
                 for block_y, block_x in win_next:
                     board_array[block_y][block_x] = opponent
@@ -256,7 +261,6 @@ class Game(object):
                         break
                 if guaranteed:
                     board_array[y1][x1] = 0
-                    print(f"2手で勝てる場所: ({y1}, {x1})")
                     return True
             board_array[y1][x1] = 0
         return False
@@ -286,7 +290,7 @@ class Game(object):
             while 0 <= nx < self.board_size and 0 <= ny < self.board_size and board_array[ny][nx] == player:
                 count += 1
                 if count >= n_in_row:
-                    print(f"勝利条件を満たす位置: ({x}, {y}) in direction ({dx}, {dy})")
+                    # print(f"勝利条件を満たす位置: ({x}, {y}) in direction ({dx}, {dy})")
                     return True
                 nx += dx
                 ny += dy
@@ -295,7 +299,7 @@ class Game(object):
             while 0 <= nx < self.board_size and 0 <= ny < self.board_size and board_array[ny][nx] == player:
                 count += 1
                 if count >= n_in_row:
-                    print(f"勝利条件を満たす位置: ({x}, {y}) in direction ({dx}, {dy})")
+                    # print(f"勝利条件を満たす位置: ({x}, {y}) in direction ({dx}, {dy})")
                     return True
                 nx -= dx
                 ny -= dy

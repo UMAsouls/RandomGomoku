@@ -488,70 +488,75 @@ class HumanVsAIGUI:
         """一回のゲームを実行する"""
         if not self.game_running:
             return
-        
+
         # ゲーム開始メッセージ
         self.master.after(0, lambda: self.turn_label.config(
             text=f"ゲーム開始 (先手: {'人間' if self.human_is_first else 'AI'})"
         ))
-        
+
         move_count = 0
         max_moves = self.board_size * self.board_size
-        
+
         while not self.game_over and self.game_running and move_count < max_moves:
             current_player_is_human = (self.human_is_first and self.env.current_player == 1) or \
                                     (not self.human_is_first and self.env.current_player == 2)
-            
+
             if current_player_is_human:
                 # 人間の手番
                 self.waiting_for_human = True
                 self.human_player.reset_move()
                 self.master.after(0, lambda: self.turn_label.config(text="あなたの手番"))
                 self.master.after(0, lambda: self.status_label.config(text="盤面をクリックして石を置いてください"))
-                
+
                 # 人間の手を待機
                 while not self.human_player.move_ready and self.game_running:
                     time.sleep(0.1)
-                
+
                 if not self.game_running:
                     break
-                
+
                 action = self.human_player.get_action(None)
                 self.waiting_for_human = False
-                
+
                 if action is None:
                     break
-                
+
                 player_name = "人間"
-                
+
             else:
                 # AIの手番
                 self.master.after(0, lambda: self.turn_label.config(text="AIの手番"))
                 self.master.after(0, lambda: self.status_label.config(text="AI思考中..."))
-                
+
                 # AI思考時間を動的に更新
                 playout_count = self.ai_playout_var.get()
                 self.ai_player.n_playout = playout_count
                 print(f"AI思考中: MCTSプレイアウト回数 = {playout_count}")
-                
-                action = self.ai_player.get_action(self.env)
-                
+
+                board = self.env.board.GetBoardInt()
+                action = self.find_winning_move(board, self.env.current_player)
+                if action is None:
+                    action = self.find_double_threat_move(board, self.env.current_player)
+                if action is None:
+                    action = self.ai_player.get_action(self.env)
+
                 if action is None:
                     break
-                
+
                 player_name = "AI"
-            
+
             # 手を実行
             _, reward, done, _ = self.env.step(action)
             move_count += 1
-            
+
             # 最後の手を記録
             self.last_move = action
-            
+
             # 盤面更新
             self.master.after(0, self.draw_board)
-            
+
             print(f"{player_name}の手: {action}")
-            
+
             if done:
                 # 勝者の判定
                 winner = 3 - self.env.current_player  # 前のプレイヤーが勝者
@@ -569,29 +574,124 @@ class HumanVsAIGUI:
                     else:
                         self.ai_wins_as_second += 1
                     result = "AIの勝利！"
-                
+
                 self.game_over = True
                 self.total_games += 1
-                
+
                 self.master.after(0, lambda: self.turn_label.config(text=f"ゲーム終了"))
                 self.master.after(0, lambda: self.status_label.config(text=result))
                 self.master.after(0, self.update_stats)
-                
+
                 # 結果をメッセージボックスで表示
                 self.master.after(0, lambda: messagebox.showinfo("ゲーム終了", result))
-                
+
                 break
-        
+
         # 最大手数に達した場合
         if move_count >= max_moves and not self.game_over:
             self.draws += 1
             self.total_games += 1
             result = "引き分け"
-            
+
             self.master.after(0, lambda: self.turn_label.config(text="ゲーム終了"))
             self.master.after(0, lambda: self.status_label.config(text=result))
             self.master.after(0, self.update_stats)
             self.master.after(0, lambda: messagebox.showinfo("ゲーム終了", result))
+
+    def find_winning_move(self, board, player):
+        """あと一手で勝てる手を返す。なければNone"""
+        n_in_row = 4  # 五目並べなら5
+        board_size = self.board_size
+        for y in range(board_size):
+            for x in range(board_size):
+                if board[y][x] == 0:
+                    board[y][x] = player
+                    if self.check_win(x, y, player, n_in_row, board):
+                        board[y][x] = 0
+                        return (x, y)
+                    board[y][x] = 0
+        return None
+
+    def find_double_threat_move(self, board, player):
+        """あと二手で確実に勝てるダブルリーチの手を返す。なければNone"""
+        n_in_row = 4
+        board_size = self.board_size
+        opponent = 2 if player == 1 else 1
+        empty_cells = [(y, x) for y in range(board_size) for x in range(board_size) if board[y][x] == 0]
+
+        # まず、相手が次の一手で勝てるかどうかをチェック
+        for oy, ox in empty_cells:
+            board[oy][ox] = opponent
+            if self.check_win(ox, oy, opponent, n_in_row, board):
+                board[oy][ox] = 0
+                # 相手が次で勝てるなら自分の2手勝ちは成立しない
+                return None
+            board[oy][ox] = 0
+
+        for idx1 in range(len(empty_cells)):
+            y1, x1 = empty_cells[idx1]
+            board[y1][x1] = player
+            next_empty = [(y, x) for (y, x) in empty_cells if (y, x) != (y1, x1)]
+            win_next = []
+            for y2, x2 in next_empty:
+                board[y2][x2] = player
+                if self.check_win(x2, y2, player, n_in_row, board):
+                    win_next.append((y2, x2))
+                board[y2][x2] = 0
+            if len(win_next) >= 2:
+                guaranteed = True
+                for block_y, block_x in win_next:
+                    board[block_y][block_x] = opponent
+                    found = False
+                    for y2, x2 in win_next:
+                        if (y2, x2) == (block_y, block_x):
+                            continue
+                        if board[y2][x2] == 0:
+                            board[y2][x2] = player
+                            if self.check_win(x2, y2, player, n_in_row, board):
+                                found = True
+                            board[y2][x2] = 0
+                    board[block_y][block_x] = 0
+                    if not found:
+                        guaranteed = False
+                        break
+                if guaranteed:
+                    board[y1][x1] = 0
+                    return (x1, y1)
+            board[y1][x1] = 0
+        return None
+
+    def check_win(self, x, y, player, n_in_row, board):
+        """指定位置からn_in_row個並んでいるか判定"""
+        board_size = self.board_size
+        if x < 0 or y < 0 or x >= board_size or y >= board_size:
+            return False
+        stone_type = board[y][x]
+        if stone_type != player:
+            return False
+        directions = [
+            (0, 1),   # 水平
+            (1, 0),   # 垂直
+            (1, 1),   # 右下対角線
+            (1, -1)   # 右上対角線
+        ]
+        for dx, dy in directions:
+            count = 1
+            nx, ny = x + dx, y + dy
+            while 0 <= nx < board_size and 0 <= ny < board_size and board[ny][nx] == player:
+                count += 1
+                if count >= n_in_row:
+                    return True
+                nx += dx
+                ny += dy
+            nx, ny = x - dx, y - dy
+            while 0 <= nx < board_size and 0 <= ny < board_size and board[ny][nx] == player:
+                count += 1
+                if count >= n_in_row:
+                    return True
+                nx -= dx
+                ny -= dy
+        return False
     
     def end_game(self):
         """ゲーム終了処理"""
