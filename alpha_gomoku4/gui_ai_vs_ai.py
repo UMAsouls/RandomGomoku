@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, filedialog
 import numpy as np
 import torch
 from GomokuEnv import GomokuEnv
@@ -17,7 +17,7 @@ class AIvsAIGUI:
         self.master.geometry("1200x800")
         
         # ゲーム設定
-        self.board_size = 8  # ボードサイズ
+        self.board_size = 6  # ボードサイズ
         self.cell_size = 40  # セルサイズ
         self.margin = 50     # マージン
         
@@ -44,10 +44,14 @@ class AIvsAIGUI:
         # ゲーム速度
         self.game_speed = 1.0
         
+        # モデルファイルパス
+        self.ai1_model_path = None
+        self.ai2_model_path = None
+        
         # GUI要素の初期化
         self.setup_gui()
         
-        # AIモデルの読み込み
+        # AIモデルの読み込み（初期はパス未指定）
         self.load_ai_models()
         
     def setup_gui(self):
@@ -199,6 +203,22 @@ class AIvsAIGUI:
         tk.Button(ai2_entry_frame, text="適用", command=update_ai2_from_entry, font=('Arial', 9)).pack(side='left')
         self.ai2_playout_var.trace('w', update_ai2_entry_from_scale)
         
+        # AI1モデルファイル選択
+        ai1_model_frame = tk.Frame(self.right_frame)
+        ai1_model_frame.pack(fill='x', pady=(0, 5))
+        tk.Label(ai1_model_frame, text="AI1モデル:", font=('Arial', 10)).pack(side='left')
+        self.ai1_model_label = tk.Label(ai1_model_frame, text="未選択", font=('Arial', 10), fg='gray')
+        self.ai1_model_label.pack(side='left', padx=(5, 5))
+        tk.Button(ai1_model_frame, text="選択", command=self.select_ai1_model, font=('Arial', 9)).pack(side='left')
+        
+        # AI2モデルファイル選択
+        ai2_model_frame = tk.Frame(self.right_frame)
+        ai2_model_frame.pack(fill='x', pady=(0, 10))
+        tk.Label(ai2_model_frame, text="AI2モデル:", font=('Arial', 10)).pack(side='left')
+        self.ai2_model_label = tk.Label(ai2_model_frame, text="未選択", font=('Arial', 10), fg='gray')
+        self.ai2_model_label.pack(side='left', padx=(5, 5))
+        tk.Button(ai2_model_frame, text="選択", command=self.select_ai2_model, font=('Arial', 9)).pack(side='left')
+        
         # ゲーム速度設定
         speed_frame = tk.Frame(self.right_frame)
         speed_frame.pack(fill='x', pady=(0, 20))
@@ -331,6 +351,20 @@ class AIvsAIGUI:
         self.move_count_label = tk.Label(progress_frame, text="手数: 0", font=('Arial', 10))
         self.move_count_label.pack()
     
+    def select_ai1_model(self):
+        path = filedialog.askopenfilename(filetypes=[("Model Files", "*.model"), ("All Files", "*")])
+        if path:
+            self.ai1_model_path = path
+            self.ai1_model_label.config(text=path.split("/")[-1], fg='black')
+            self.load_ai_models()
+    
+    def select_ai2_model(self):
+        path = filedialog.askopenfilename(filetypes=[("Model Files", "*.model"), ("All Files", "*")])
+        if path:
+            self.ai2_model_path = path
+            self.ai2_model_label.config(text=path.split("/")[-1], fg='black')
+            self.load_ai_models()
+    
     def load_ai_models(self):
         """AIモデルを読み込む"""
         try:
@@ -340,13 +374,24 @@ class AIvsAIGUI:
             # 一時的な環境を作成（PolicyValueNetの初期化用）
             temp_env = GomokuEnv(board_size=self.board_size)
             
-            # PolicyValueNetの初期化
+            # GPUチェック
             use_gpu = torch.cuda.is_available()
             print(f"GPU使用可能: {use_gpu}")
             
-            self.policy_value_net = PolicyValueNet(
+            # AI1モデル
+            ai1_model_file = self.ai1_model_path if self.ai1_model_path else "best_policypuct5.model"
+            self.policy_value_net1 = PolicyValueNet(
                 board_size=self.board_size,
-                model_file="current_policy.model",
+                model_file=ai1_model_file,
+                use_gpu=use_gpu,
+                env=temp_env
+            )
+            
+            # AI2モデル
+            ai2_model_file = self.ai2_model_path if self.ai2_model_path else "current_policy.model"
+            self.policy_value_net2 = PolicyValueNet(
+                board_size=self.board_size,
+                model_file=ai2_model_file,
                 use_gpu=use_gpu,
                 env=temp_env
             )
@@ -354,7 +399,7 @@ class AIvsAIGUI:
             # AI1プレイヤーの初期化
             initial_playout1 = self.ai1_playout_var.get()
             self.ai_player1 = MCTSPlayer(
-                self.policy_value_net.policy_value_fn,
+                self.policy_value_net1.policy_value_fn,
                 c_puct=5,
                 n_playout=initial_playout1,
                 is_selfplay=0
@@ -363,15 +408,14 @@ class AIvsAIGUI:
             # AI2プレイヤーの初期化
             initial_playout2 = self.ai2_playout_var.get()
             self.ai_player2 = MCTSPlayer(
-                self.policy_value_net.policy_value_fn,
+                self.policy_value_net2.policy_value_fn,
                 c_puct=5,
                 n_playout=initial_playout2,
                 is_selfplay=0
             )
             
-            print(f"AI1プレイヤー初期化完了: 初期プレイアウト回数 = {initial_playout1}")
-            print(f"AI2プレイヤー初期化完了: 初期プレイアウト回数 = {initial_playout2}")
-            
+            print(f"AI1モデル: {ai1_model_file}")
+            print(f"AI2モデル: {ai2_model_file}")
             print("AIモデル読み込み完了")
             self.status_label.config(text="モデル読み込み完了")
             self.start_button.config(state='normal')
@@ -518,6 +562,7 @@ class AIvsAIGUI:
         """ゲームループを実行する（別スレッド）"""
         while self.game_running:
             try:
+                self.game_over = False  # ★毎試合前にリセット
                 self.play_single_game()
                 if self.game_running and not self.auto_continue:
                     # 単発ゲームの場合は終了
@@ -559,7 +604,7 @@ class AIvsAIGUI:
         
         move_count = 0
         max_moves = self.board_size * self.board_size
-        
+        result = None  # ← 追加: resultを初期化
         while not self.game_over and self.game_running and move_count < max_moves:
             # 現在のプレイヤーがAI1かAI2かを判定
             current_player_is_ai1 = (ai1_is_first and self.env.current_player == 1) or \
@@ -641,7 +686,8 @@ class AIvsAIGUI:
             if move_count >= max_moves and not self.game_over:
                 self.draws += 1
                 result = "引き分け（最大手数）"
-            
+            if result is None:
+                result = "不明な結果"
             self.total_games += 1
             
             self.master.after(0, lambda: self.turn_label.config(text=f"ゲーム終了: {result}"))
