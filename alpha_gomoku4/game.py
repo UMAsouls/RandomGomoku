@@ -1,5 +1,6 @@
 import numpy as np
 from GomokuEnv import GomokuEnv
+N_IN_ROW = 4  # 五目並べなら5。必要に応じて変更してください。
 
 class Game(object):
     def __init__(self, env:GomokuEnv, board_size=19):
@@ -121,6 +122,17 @@ class Game(object):
         states, mcts_probs, current_players = [], [], []
         
         while True:
+            #勝ち確定の場合、勝利扱いにする
+            # if  self.is_winning(self.env):
+            #     winner = self.env.current_player
+            #     print(f"Game Over: Player {winner} wins")
+            #     print(f"早期終了盤面")
+            #     self.env.board.PrintBoard()
+            #     winners_z = np.zeros(len(current_players))
+            #     winners_z[np.array(current_players) == winner] = 1.0
+            #     winners_z[np.array(current_players) != winner] = -1.0
+            #     player.reset_player()
+            #     return winners_z, zip(states, mcts_probs, winners_z)
             move, mcts_prob = player.get_action(self.env, temp=temp, return_prob=True)
             
             # ボードが満杯で有効な手がない場合の処理
@@ -152,6 +164,9 @@ class Game(object):
                 if winner != 0:
                     print(f"Winner: Player {winner}")
                     print(f"Current Players: {current_players}")
+                    print(f"winners_z: {len(winners_z)}")
+                    print(f"len(current_players): {len(current_players)}")
+                    print(f"len(states): {len(states)}")
                     winners_z[np.array(current_players) == winner] = 1.0
                     winners_z[np.array(current_players) != winner] = -1.0
                     # print(f"winners_z: {winners_z}")
@@ -191,5 +206,101 @@ class Game(object):
         
         
         return square_state
+    
+    def is_winning(self, env:GomokuEnv):
+        """Check if the current player has won or is guaranteed to win in 1 or 2 moves."""
+        board_array = env.board.GetBoardInt()
+        print(f"盤面チェック: {board_array}")
+        current_player = env.current_player
+        opponent = 2 if current_player == 1 else 1
+        empty_cells = [(y, x) for y in range(self.board_size) for x in range(self.board_size) if board_array[y][x] == 0]
+        # 1手で勝てるかどうかをチェック
+        for y, x in empty_cells:
+            board_array[y][x] = current_player
+            if self.CheckWin(x, y, current_player, N_IN_ROW, board_array):
+                board_array[y][x] = 0
+                print(f"1手で勝てる場所: ({y}, {x})")
+                return True
+            board_array[y][x] = 0  # 元に戻す
+        # 2手で、相手がどこに妨害しても勝てるか（ダブルリーチ）効率化
+        for idx1 in range(len(empty_cells)):
+            y1, x1 = empty_cells[idx1]
+            board_array[y1][x1] = current_player
+            # 1手目を仮置きした後の空きマス
+            next_empty = [(y, x) for (y, x) in empty_cells if (y, x) != (y1, x1)]
+            # 2手目で勝てる場所（リーチリスト）
+            win_next = []
+            for y2, x2 in next_empty:
+                board_array[y2][x2] = current_player
+                if self.CheckWin(x2, y2, current_player, N_IN_ROW, board_array):
+                    win_next.append((y2, x2))
+                board_array[y2][x2] = 0
+            # リーチが2つ以上ならダブルリーチ
+            if len(win_next) >= 2:
+                # 妨害候補はリーチリストのみ
+                guaranteed = True
+                for block_y, block_x in win_next:
+                    board_array[block_y][block_x] = opponent
+                    found = False
+                    for y2, x2 in win_next:
+                        if (y2, x2) == (block_y, block_x):
+                            continue
+                        if board_array[y2][x2] == 0:
+                            board_array[y2][x2] = current_player
+                            if self.CheckWin(x2, y2, current_player, N_IN_ROW, board_array):
+                                found = True
+                            board_array[y2][x2] = 0
+                    board_array[block_y][block_x] = 0
+                    if not found:
+                        guaranteed = False
+                        break
+                if guaranteed:
+                    board_array[y1][x1] = 0
+                    print(f"2手で勝てる場所: ({y1}, {x1})")
+                    return True
+            board_array[y1][x1] = 0
+        return False
+    def CheckWin(self, x: int, y: int, player: int, n_in_row: int, board_array=None) -> bool:
+        """
+        指定された位置からn_in_row個の石が並んでいるかをチェックします。
+        勝利条件を満たしていればTrue、そうでなければFalseを返します。
+        board_array: 盤面（2次元リスト）を直接参照する
+        """
+        if x < 0 or y < 0 or x >= self.board_size or y >= self.board_size:
+            return False
+        if board_array is None:
+            board_array = self.env.board.GetBoardInt()
+        stone_type = board_array[y][x]
+        if stone_type != player:
+            return False
+        directions = [
+            (0, 1),   # 水平
+            (1, 0),   # 垂直
+            (1, 1),   # 右下対角線
+            (1, -1)   # 右上対角線
+        ]
+        for dx, dy in directions:
+            count = 1
+            # 正方向
+            nx, ny = x + dx, y + dy
+            while 0 <= nx < self.board_size and 0 <= ny < self.board_size and board_array[ny][nx] == player:
+                count += 1
+                if count >= n_in_row:
+                    print(f"勝利条件を満たす位置: ({x}, {y}) in direction ({dx}, {dy})")
+                    return True
+                nx += dx
+                ny += dy
+            # 逆方向
+            nx, ny = x - dx, y - dy
+            while 0 <= nx < self.board_size and 0 <= ny < self.board_size and board_array[ny][nx] == player:
+                count += 1
+                if count >= n_in_row:
+                    print(f"勝利条件を満たす位置: ({x}, {y}) in direction ({dx}, {dy})")
+                    return True
+                nx -= dx
+                ny -= dy
+        return False
+
+    
             
         

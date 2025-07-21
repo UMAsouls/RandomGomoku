@@ -152,8 +152,8 @@ class Game(object):
                 if winner != 0:
                     print(f"Winner: Player {winner}")
                     print(f"Current Players: {current_players}")
-                    winners_z[np.array(current_players) == winner] = 1.0
-                    winners_z[np.array(current_players) != winner] = -1.0
+                    winners_z[np.array(current_players) == winner] = -1.0
+                    winners_z[np.array(current_players) != winner] = 1.0
                     # print(f"winners_z: {winners_z}")
                 player.reset_player()
                 print("返り値チェック")

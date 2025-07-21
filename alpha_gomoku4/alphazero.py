@@ -27,7 +27,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import threading
 
 BOARD_SIZE = 6  # ボードサイズ
-N_IN_ROW = 5 # 勝利条件（連続する石の数）
+N_IN_ROW = 4 # 勝利条件（連続する石の数）
 
 def parallel_data_augmentation(args):
     """データ拡張を並列で実行するための関数"""
@@ -89,15 +89,15 @@ class AlphaZero:
         self.lr_multiplier = 1.0  # 学習率の乗数、KLに基づいて調整
         self.temp = 1.0  # 温度パラメータ
         self.n_playout = 400     # 各着手ごとのプレイアウト回数
-        self.c_puct = 5  # UCBスコアの探索項の係数
+        self.c_puct = 4  # UCBスコアの探索項の係数
         self.buffer_size = 10000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
         self.date_buffer = deque(maxlen=self.buffer_size)  # 経験再生バッファ
-        self.play_batch_size = 1  # 自己対戦の並列実行数
-        self.epochs = 20  # 各更新ステップでのエポック数
+        self.play_batch_size = 8  # 自己対戦の並列実行数
+        self.epochs =20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
-        self.check_freq = 100 # モデル評価の頻度（100ゲームごと）
-        self.game_batch_num = 5000  # 1回のトレーニングサイクルでプレイするゲーム数
+        self.check_freq = 50 # モデル評価の頻度（100ゲームごと）
+        self.game_batch_num = 1500  # 1回のトレーニングサイクルでプレイするゲーム数
         self.best_win_ratio = 0.0  # 最善モデルの勝率
         
         # Loss記録用

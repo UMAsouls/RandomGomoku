@@ -20,9 +20,9 @@ def main():
                         help='バッチあたりのゲーム数（デフォルト: 4）')
     parser.add_argument('--total-batches', type=int, default=5000,
                         help='総バッチ数（デフォルト: 5000）')
-    parser.add_argument('--playout', type=int, default=10,
+    parser.add_argument('--playout', type=int, default=400,
                         help='MCTSプレイアウト数（デフォルト: 400）')
-    parser.add_argument('--check-freq', type=int, default=100,
+    parser.add_argument('--check-freq', type=int, default=50,
                         help='モデル評価の頻度（デフォルト: 100）')
     parser.add_argument('--buffer-size', type=int, default=None,
                         help='経験再生バッファサイズ（デフォルト: 自動調整）')
