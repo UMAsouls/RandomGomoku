@@ -10,6 +10,7 @@ class Game(object):
         self.current_player = env.current_player
         self.lastmove = env.lastmove
 
+
     def start_play(self, player1, player2, start_player=0, is_shown=1):
         """
         2人のプレイヤー間でゲームを開始します。
