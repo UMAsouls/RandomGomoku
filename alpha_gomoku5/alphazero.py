@@ -322,7 +322,11 @@ class AlphaZero:
             import time
             # トレーニング開始時に初期の最善モデルを保存（存在しない場合）
             import os
-            if not os.path.exists('./best_policy.model'):
+            if os.path.exists('./best_policy.model'):
+                print("既存の最善ポリシーモデルをロードしています...")
+                self.policy_value_net.load_model('./best_policy.model')
+                print("最善ポリシーモデルをロードしました。")
+            else:
                 print("初期の最善ポリシーモデルを保存しています...")
                 self.policy_value_net.save_model('./best_policy.model')
                 print("初期の最善ポリシーモデルを保存しました。")

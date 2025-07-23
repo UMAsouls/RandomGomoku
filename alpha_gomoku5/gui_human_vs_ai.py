@@ -40,7 +40,7 @@ class HumanVsAIGUI:
         self.master.geometry("1000x700")
         
         # ゲーム設定
-        self.board_size = 6  # ボードサイズ
+        self.board_size = 9  # ボードサイズ
         self.cell_size = 40  # セルサイズ
         self.margin = 50     # マージン
         

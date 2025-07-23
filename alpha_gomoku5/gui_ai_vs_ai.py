@@ -17,7 +17,7 @@ class AIvsAIGUI:
         self.master.geometry("1200x800")
         
         # ゲーム設定
-        self.board_size = 6  # ボードサイズ
+        self.board_size = 9  # ボードサイズ
         self.cell_size = 40  # セルサイズ
         self.margin = 50     # マージン
         
@@ -609,7 +609,7 @@ class AIvsAIGUI:
             # 現在のプレイヤーがAI1かAI2かを判定
             current_player_is_ai1 = (ai1_is_first and self.env.current_player == 1) or \
                                    (not ai1_is_first and self.env.current_player == 2)
-            
+
             if current_player_is_ai1:
                 # AI1の手番
                 current_ai = self.ai_player1
@@ -622,38 +622,45 @@ class AIvsAIGUI:
                 ai_name = "AI2"
                 playout_count = self.ai2_playout_var.get()
                 current_ai.n_playout = playout_count
-            
+
             # 手番表示
             self.master.after(0, lambda name=ai_name: self.turn_label.config(text=f"{name}の手番"))
-            self.master.after(0, lambda name=ai_name, count=playout_count: 
-                            self.status_label.config(text=f"{name}思考中 (プレイアウト: {count})"))
-            
-            # AIの手を取得
-            action = current_ai.get_action(self.env)
-            
+            self.master.after(0, lambda name=ai_name, count=playout_count:
+                             self.status_label.config(text=f"{name}思考中 (プレイアウト: {count})"))
+
+            board = self.env.board.GetBoardInt()
+            player = self.env.current_player
+            # --- ここから勝ち確定手探索 ---
+            action = self.find_winning_move(board, player)
+            if action is None:
+                action = self.find_double_threat_move(board, player)
+            if action is None:
+                action = current_ai.get_action(self.env)
+            # --- ここまで ---
+
             if action is None:
                 # 有効な手がない場合は引き分け
                 self.game_over = True
                 self.draws += 1
                 result = "引き分け"
                 break
-            
+
             # 手を実行
             _, reward, done, _ = self.env.step(action)
             move_count += 1
-            
+
             # 最後の手を記録
             self.last_move = action
-            
+
             # 盤面更新
             self.master.after(0, self.draw_board)
-            
+
             # 手数更新
-            self.master.after(0, lambda count=move_count: 
-                            self.move_count_label.config(text=f"手数: {count}"))
-            
+            self.master.after(0, lambda count=move_count:
+                             self.move_count_label.config(text=f"手数: {count}"))
+
             print(f"{ai_name}の手: {action}")
-            
+
             if done:
                 # 勝者の判定
                 winner = 3 - self.env.current_player  # 前のプレイヤーが勝者
@@ -673,13 +680,99 @@ class AIvsAIGUI:
                     else:
                         self.ai2_wins_as_second += 1
                     result = "AI2の勝利"
-                
+
                 self.game_over = True
                 break
-            
+
             # 手番間の待機
             if self.game_running:
                 time.sleep(self.speed_var.get())
+    # --- ここから確定手探索メソッド追加 ---
+    def find_winning_move(self, board, player):
+        """あと一手で勝てる手を返す。なければNone"""
+        n_in_row = 4  # 五目並べなら5
+        board_size = self.board_size
+        for y in range(board_size):
+            for x in range(board_size):
+                if board[y][x] == 0:
+                    board[y][x] = player
+                    if self.check_win(x, y, player, n_in_row, board):
+                        board[y][x] = 0
+                        return (x, y)
+                    board[y][x] = 0
+        return None
+
+    def find_double_threat_move(self, board, player):
+        """あと二手で確実に勝てるダブルリーチの手を返す。なければNone"""
+        n_in_row = 4
+        board_size = self.board_size
+        opponent = 2 if player == 1 else 1
+        empty_cells = [(y, x) for y in range(board_size) for x in range(board_size) if board[y][x] == 0]
+        for idx1 in range(len(empty_cells)):
+            y1, x1 = empty_cells[idx1]
+            board[y1][x1] = player
+            next_empty = [(y, x) for (y, x) in empty_cells if (y, x) != (y1, x1)]
+            win_next = []
+            for y2, x2 in next_empty:
+                board[y2][x2] = player
+                if self.check_win(x2, y2, player, n_in_row, board):
+                    win_next.append((y2, x2))
+                board[y2][x2] = 0
+            if len(win_next) >= 2:
+                guaranteed = True
+                for block_y, block_x in win_next:
+                    board[block_y][block_x] = opponent
+                    found = False
+                    for y2, x2 in win_next:
+                        if (y2, x2) == (block_y, block_x):
+                            continue
+                        if board[y2][x2] == 0:
+                            board[y2][x2] = player
+                            if self.check_win(x2, y2, player, n_in_row, board):
+                                found = True
+                            board[y2][x2] = 0
+                    board[block_y][block_x] = 0
+                    if not found:
+                        guaranteed = False
+                        break
+                if guaranteed:
+                    board[y1][x1] = 0
+                    return (x1, y1)
+            board[y1][x1] = 0
+        return None
+
+    def check_win(self, x, y, player, n_in_row, board):
+        """指定位置からn_in_row個並んでいるか判定"""
+        board_size = self.board_size
+        if x < 0 or y < 0 or x >= board_size or y >= board_size:
+            return False
+        stone_type = board[y][x]
+        if stone_type != player:
+            return False
+        directions = [
+            (0, 1),   # 水平
+            (1, 0),   # 垂直
+            (1, 1),   # 右下対角線
+            (1, -1)   # 右上対角線
+        ]
+        for dx, dy in directions:
+            count = 1
+            nx, ny = x + dx, y + dy
+            while 0 <= nx < board_size and 0 <= ny < board_size and board[ny][nx] == player:
+                count += 1
+                if count >= n_in_row:
+                    return True
+                nx += dx
+                ny += dy
+            nx, ny = x - dx, y - dy
+            while 0 <= nx < board_size and 0 <= ny < board_size and board[ny][nx] == player:
+                count += 1
+                if count >= n_in_row:
+                    return True
+                nx -= dx
+                ny -= dy
+        return False
+    # --- ここまで ---
         
         # ゲーム終了処理
         if self.game_running:
