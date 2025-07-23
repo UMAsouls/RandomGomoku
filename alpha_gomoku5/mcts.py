@@ -284,7 +284,6 @@ class MCTSPlayer(object):
                     legal_positions.append(x+ y * board_size)
         # print(f"有効な手の数: {len(legal_positions)}")
         # print(f"有効な手の位置: {legal_positions}")
-        
         return legal_positions
     def get_action(self, env:GomokuEnv, temp=1e-3, return_prob=0):
         

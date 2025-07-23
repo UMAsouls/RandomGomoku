@@ -379,7 +379,7 @@ class AIvsAIGUI:
             print(f"GPU使用可能: {use_gpu}")
             
             # AI1モデル
-            ai1_model_file = self.ai1_model_path if self.ai1_model_path else "current_policy1-1.model"
+            ai1_model_file = self.ai1_model_path if self.ai1_model_path else "best_policypuct5.model"
             self.policy_value_net1 = PolicyValueNet(
                 board_size=self.board_size,
                 model_file=ai1_model_file,
