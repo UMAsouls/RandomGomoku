@@ -89,11 +89,11 @@ class AlphaZero:
         self.lr_multiplier = 1.0  # 学習率の乗数、KLに基づいて調整
         self.temp = 1.0  # 温度パラメータ
         self.n_playout = 400     # 各着手ごとのプレイアウト回数
-        self.c_puct = 4  # UCBスコアの探索項の係数
+        self.c_puct = 5  # UCBスコアの探索項の係数
         self.buffer_size = 25000  # 経験再生バッファのサイズ
         self.batch_size = 512  # トレーニング時のバッチサイズ
         self.date_buffer = deque(maxlen=self.buffer_size)  # 経験再生バッファ
-        self.play_batch_size = 16  # 自己対戦の並列実行数
+        self.play_batch_size = 12  # 自己対戦の並列実行数
         self.epochs =20  # 各更新ステップでのエポック数
         self.kl_targ = 0.02 # KLダイバージェンスの目標値
         self.check_freq = 50 # モデル評価の頻度（100ゲームごと）
@@ -116,16 +116,18 @@ class AlphaZero:
                                        is_selfplay=True)
         
         # GPU使用率を制限するための設定
+        # GPU制限なし
         if torch.cuda.is_available():
-            # GPUメモリの使用量を制限
-            torch.cuda.set_per_process_memory_fraction(1)  # 100%に制限
-            torch.cuda.empty_cache()
-            
-            # GPU計算のバッチサイズを動的に調整
-            self.gpu_batch_size = 32  # GPUでの推論バッチサイズを小さくする
-            print(f"GPU使用率を80%に制限しました")
+            self.gpu_batch_size = 64  # GPU利用時のバッチサイズ
         else:
             self.gpu_batch_size = 64
+
+        # current_policy.model が存在しない場合は初期保存
+        if not os.path.exists('./current_policy.model'):
+            print("初期の current_policy.model を保存しています...")
+            self.policy_value_net.save_model('./current_policy.model')
+            print("初期の current_policy.model を保存しました。")
+        
     
     def __del__(self):
         """デストラクタでスレッドプールを終了"""
