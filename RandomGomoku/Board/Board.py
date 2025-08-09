@@ -1,7 +1,7 @@
 from injector import inject
 from random import randint
 
-from RandomGomoku.Interfaces import IHeadMass, IMass
+from RandomGomoku.Interfaces import IHeadMass, IMass, IBoard
 
 from RandomGomoku.const import Stone
 
@@ -12,30 +12,7 @@ import numpy as np
 BLACKINT = 1
 WHITEINT = 2
 
-class BoardWB:
-    def __init__(self, bboard: np.ndarray, wboard: np.ndarray) -> None:
-        self.__board_wb: list[np.ndarray] = [0,0]
-        self.__board_wb[BLACKINT-1] = bboard
-        self.__board_wb[WHITEINT-1] = wboard
-        
-        
-    def SetStatus(self, x: int, y: int, player: int, kind: int = 1) -> None:
-        self.__board_wb[player-1][y][x] = kind
-        
-    def GetStatusFrom(self, x: int, y: int, player: int) -> int:
-        if(player != BLACKINT and player != WHITEINT):
-            raise ValueError("Player must be Stone.BLACK or Stone.WHITE")
-        
-        opponent = BLACKINT if player == WHITEINT else WHITEINT
-        
-        if(self.__board_wb[player-1][y][x] == 1):
-            return 1
-        elif(self.__board_wb[opponent-1][y][x] == 1):
-            return 2
-        else:
-            return 0
-
-class FastBoard:
+class FastBoard(IBoard):
     def __init__(self) -> None:
         self.__board: np.ndarray
     
@@ -55,8 +32,8 @@ class FastBoard:
             white_rand1,white_rand2,white_rand3,white_rand4
         ]
         
-        black_rand1: RandomSetter = RandomSetter(black_rand_size[0], 0, black_rand_size[0], h)
-        black_rand2: RandomSetter = RandomSetter(0, black_rand_size[1], w, black_rand_size[1])
+        black_rand1: RandomSetter = RandomSetter(white_rand_size[0], 0, black_rand_size[0], h)
+        black_rand2: RandomSetter = RandomSetter(0, white_rand_size[1], w, black_rand_size[1])
         
         black_rands: list[RandomSetter] = [
             black_rand1, black_rand2

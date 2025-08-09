@@ -11,12 +11,12 @@ MODEL_DIR = "NTupleQModel"
 MODEL_NAME = "Model7_02_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
-NETS = [10]
+NETS = [5]
 
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
 agent = NTupleQAgent(board_size=game.board_size, model_path=MODEL_PATH, net_list=NETS)
 
-episodes = 100000
+episodes = 10000
 save_rate = 5000
 
 for episode in range(episodes):

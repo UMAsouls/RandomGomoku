@@ -124,8 +124,7 @@ class NTupleBoard:
     
     def load(self, path: str) -> None:
         self.lut = np.load(path)
-
-
+        
 
 
 # 五目並べのN-tupleネットワークの実装
@@ -133,17 +132,13 @@ class NTupleNetwork:
     def __init__(self, board_size: int, ts: list[int] = [10], learning_rate: float = 0.01) -> None:
         self.board_size = board_size
         self.learning_rate = learning_rate
+        
+        
 
         self.ts = ts
         
         self.n_tuples: list[NTupleBoard] = []
         self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
-        
-    def init_weights(self, mu: float = 0, sigma: float = 1) -> None:
-        # ルックアップテーブルの初期化
-        rng = np.random.default_rng()
-        for ntuple in self.n_tuples:
-            ntuple.lut = rng.normal(mu, sigma, ntuple.lut.shape)
         
     def add_all_dir_n_tuples(self, n:int) -> None:
         self.n_tuples.append(NTupleBoard(n, self.board_size))
@@ -151,7 +146,6 @@ class NTupleNetwork:
     def define_tuples(self) -> None:
         for i in self.ts:
             self.add_all_dir_n_tuples(i)
-        #self.init_weights()  # ルックアップテーブルの初期化
         
     # 盤面の状態から選択可能な手を評価するメソッド
     def evaluate(self, board: np.ndarray) -> np.ndarray:
