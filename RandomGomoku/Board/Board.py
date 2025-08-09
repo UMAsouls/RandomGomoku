@@ -15,6 +15,42 @@ WHITEINT = 2
 class FastBoard(IBoard):
     def __init__(self) -> None:
         self.__board: np.ndarray
+        
+    def AltRandomSet(self):
+        w = self.__board.shape[1]
+        h = self.__board.shape[0]
+
+        # --- 白石（青）の配置 ---
+        # 4つの区画の基点となる座標を定義
+        # (例: 8x8の場合、(2,2), (6,2), (2,6), (6,6) を中心としたエリア)
+        quadrant_origins = [(w//4-1, h//4-1), (w - w//4-1, h//4-1), 
+                            (w//4-1, h - h//4-1), (w - w//4-1, h - h//4-1)]
+
+        # 各区画内でランダムな座標を決めるための範囲 (2x2)
+        random_area_size = (2, 2)
+        
+        # 各区画のRandomSetterを作成
+        random_setters: list[RandomSetter] = []
+        for origin in quadrant_origins:
+            # 2x2の範囲を持つRandomSetterをリストに追加
+            random_setters.append(RandomSetter(origin[0], origin[1], 
+                                            random_area_size[0], random_area_size[1]))
+        
+        # 各区画に1つずつ石を置く
+        for setter in random_setters:
+            # RandomSetterの範囲内からランダムな座標を「1つ」取得
+            # (※RandomMassGet()ではなく、1つだけ座標を返すメソッドを呼び出す)
+            pos = setter.RandomMassGet()
+            
+            # 取得した座標に白石を置く
+            self.SetStone(pos[0], pos[1], Stone.WHITE)
+            
+        # --- 黒石（赤）の配置 ---
+        # 中央の座標を計算
+        center_pos = (w//2, h//2)
+        
+        # 中央に黒石を置く
+        self.SetStone(center_pos[0], center_pos[1], Stone.BLACK)
     
     def RandomSet(self):
         w = self.__board.shape[1]
@@ -59,7 +95,10 @@ class FastBoard(IBoard):
         
         self.__board_wb = [self.__board, self.__board_oppose]
         
-        self.RandomSet()
+        #self.RandomSet()
+        
+        #ルール変更に対応
+        self.AltRandomSet()
         
         
         
