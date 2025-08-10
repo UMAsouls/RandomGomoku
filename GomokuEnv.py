@@ -6,7 +6,9 @@ from RandomGomoku.const import Stone
 import numpy as np
 from RandomGomoku.const import Stone
 
-class GomokuEnv:
+from Interfaces import IEnv
+
+class GomokuEnv(IEnv):
     def __init__(self, board_size=19,train_target = "first"):
         self.board_size = board_size
         self.container = Dependency()

@@ -7,6 +7,10 @@ class IBoard(ABC):
         pass
     
     @abstractmethod
+    def SetBoard(self, board:np.ndarray) -> np.ndarray:
+        pass
+    
+    @abstractmethod
     def GetBoardInt(self) -> np.ndarray:
         pass
     @abstractmethod

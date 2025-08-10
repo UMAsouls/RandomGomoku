@@ -38,8 +38,6 @@ class FastBoard(IBoard):
         
         # 各区画に1つずつ石を置く
         for setter in random_setters:
-            # RandomSetterの範囲内からランダムな座標を「1つ」取得
-            # (※RandomMassGet()ではなく、1つだけ座標を返すメソッドを呼び出す)
             pos = setter.RandomMassGet()
             
             # 取得した座標に白石を置く
@@ -100,7 +98,8 @@ class FastBoard(IBoard):
         #ルール変更に対応
         self.AltRandomSet()
         
-        
+    def SetBoard(self, board:np.ndarray) -> None:
+        self.__board = board
         
     def GetBoardInt(self) -> np.ndarray:
         return self.__board.copy()
