@@ -133,8 +133,6 @@ class NTupleNetwork:
         self.board_size = board_size
         self.learning_rate = learning_rate
         
-        
-
         self.ts = ts
         
         self.n_tuples: list[NTupleBoard] = []
@@ -195,6 +193,7 @@ class NTupleNetwork:
 
     def load(self, dir_path:str) -> None:
         self.ts: list[int] = []
+        self.n_tuples: list[NTupleBoard] = []
         model_kind_path = dir_path + "/kind.csv"
         with open(model_kind_path, mode = "r", encoding="utf-8") as f:
             line = f.read()
