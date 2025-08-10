@@ -45,8 +45,6 @@ class NTupleQAgent:
             scores = self.ntuple_network.evaluate(board)
             
             max_value = np.max(scores)
-            if max_value <= 0:
-                return self.random_empty_action(board)
             indices = np.where(scores == max_value)[0]  # 最大値のインデックスを取得
             action = np.random.choice(indices)
             return action
