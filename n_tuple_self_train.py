@@ -5,10 +5,10 @@ import numpy as np
 
 import time
 
-BOARD_SIZE = 15  # ボードのサイズ
+BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleQModel"
-MODEL_NAME = "Model7_02_2"
+MODEL_NAME = "MiniModel8_10_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 NETS = [5]
@@ -70,4 +70,6 @@ for episode in range(episodes):
 
     if (episode % save_rate == 0):
         agent.save()
+        
+agent.save()
 
