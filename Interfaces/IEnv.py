@@ -15,11 +15,19 @@ class IEnv(ABC):
         pass
     
     @abstractmethod
-    def OpposeBoard(self) -> np.ndarray:
+    def GetBoard_Player1(self) -> np.ndarray:
+        pass
+    
+    @abstractmethod
+    def GetBoard_Player2(self) -> np.ndarray:
         pass
     
     @abstractmethod
     def SetBoard(self, board: np.ndarray) -> None:
+        pass
+    
+    @abstractmethod
+    def GetLegalAction(self) -> np.ndarray:
         pass
     
     

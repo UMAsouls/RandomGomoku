@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from RandomGomoku.const import Stone
 
 class IBoard(ABC):
     @abstractmethod
@@ -22,7 +23,7 @@ class IBoard(ABC):
         pass
     
     @abstractmethod
-    def SetStone(self, x:int, y:int) -> int:
+    def SetStone(self, x:int, y:int, stone:Stone) -> int:
         pass
     
     @abstractmethod
