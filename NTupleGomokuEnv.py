@@ -1,5 +1,7 @@
 import numpy as np
 
+from const import EnvBackup
+
 from GomokuEnv import GomokuEnv
 from RandomGomoku import GetBoard, IBoard,Stone
 
@@ -22,34 +24,31 @@ class NTupleGomokuEnv(GomokuEnv):
                 reward = -1
         else:
             reward = 0
-        
-        if self.current_player == 2 and self.train_player == 0:
-            return self.board.GetBoardOppose(), reward, done, a2
-        else:
-            return self.board.GetBoardInt(), reward, done, a2
+            
+        return self.GetBoard_CurrentPlayer(), reward, done, a2
         
     def GetBoard(self):
         return self.board.GetBoardInt()
         
     def GetBoard_Player1(self):
-        if self.current_player == 2 and self.train_player == 0:
-            return self.board.GetBoardOppose()
-        else:
-            return self.board.GetBoardInt()
+        return self.board.GetBoardInt()
     
     def GetBoard_Player2(self):
+        return self.board.GetBoardOppose()
+    
+    def GetBoard_CurrentPlayer(self) -> np.ndarray:
         if self.current_player == 2 and self.train_player == 0:
-            return self.board.GetBoardInt()
-        else:
             return self.board.GetBoardOppose()
+        else:
+            return self.board.GetBoardInt()
         
     def GetLegalAction(self) -> np.ndarray:
         b = self.board.GetBoardInt()
         
-        x,y = np.where(b == 0)
-        arr = np.array((x,y))
+        y,x = np.where(b == 0)
+        arr = y*self.board_size + x
         
-        return arr.T
+        return arr
         
     def SetBoard(self, b:np.ndarray) -> None:
         self.board.SetBoard(b)
@@ -63,11 +62,23 @@ class NTupleGomokuEnv(GomokuEnv):
     def AnimationEnd(self):
         print(f"\033[{self.board_size+1}B")
         
+    def backup(self):
+        s = 1 if self.stone == Stone.BLACK else 2
+        
+        return EnvBackup(self.board, self.current_player, s, self.blackStones, self.whiteStones)
+        
+    def restore(self, data: EnvBackup):
+        self.board.SetBoard(data.board)
+        self.current_player = data.current_player
+        self.stone = Stone.BLACK if data.stone == 1 else Stone.WHITE
+        self.blackStones = data.blackStones
+        self.whiteStones = data.whiteStones
+        
 
 if __name__ == "__main__":
     board = NTupleGomokuEnv()
     
-    board.board.SetStone(0,0, Stone.BLACK)
+    #board.board.SetStone(0,0, Stone.BLACK)
     board.board.PrintBoard()
     
     print(board.GetLegalAction())

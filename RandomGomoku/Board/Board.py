@@ -182,6 +182,8 @@ class FastBoard(IBoard):
     def PrintBoard(self) -> None:
         print(self.StringBoard())
 
+#これより下は古いコードで使ってない
+
 class Board():
     
     @inject

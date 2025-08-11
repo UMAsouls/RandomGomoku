@@ -86,6 +86,16 @@ class Node:
         self._N += 1
         self._W += value
         
+    def GetChildrenNs(self) -> np.ndarray:
+        children: list["Node"] = list(self._childs.values())
+        
+        return np.array([i.N for i in children], dtype=np.int64)
+    
+    def GetActions(self) -> np.ndarray:
+        actions: np.ndarray = np.array(list(self._childs.keys()))
+        
+        return actions
+        
         
     @property
     def is_leaf(self) -> bool:
@@ -105,44 +115,72 @@ class NTupleMCTSAgent:
         
         self.root = Node(None, 1.0, board_size**2)
         
-    def Search(self) -> np.ndarray:
+    def Search(self) -> int:
+        
+        dat = self.env.backup()
         start_time = time.time()
         
         while time.time() - start_time < SEARCH_TIME:
             self.__search_once()
+            self.env.restore(dat)
+            
+        
+        N_values = self.root.GetChildrenNs()
+        actions = self.root.GetActions()
+        max_n = np.max(N_values)
+        indices = np.where(N_values == max_n)[0]
+        
+        action = actions[np.random.choice(indices)]
+        
+        return action
             
         
         
     def __search_once(self) -> int:
-        start_state = self.env.GetBoard()
         node = self.root
-        
         done = False
-        state = start_state
-        next_state = None
         
         while not node.is_leaf:
             act, node = node.select(CPUCT)
             
             (x,y) = (act%self.board_size, act//self.board_size)
-            next_state, reward, done, _ = self.env.step((x,y))
+            _, reward, done, _ = self.env.step((x,y))
             
         if not done:
-            value = self.__expand_func()
+            value = self.__expand_func(node)
         else:
             value = reward
             
-            
         while node is not None:
-            value = -value
             node.update(value=value)
             node = node.Parent
+            value = -value
             
-        self.env.SetBoard(start_state)
             
-            
-    def __expand_func(self) -> float:
-        pass
+    def __expand_func(self, node: Node) -> float:
+        board: np.ndarray = self.env.GetBoard_CurrentPlayer()
+        
+        legal_move = self.env.GetLegalAction()
+        p_scores = self.policy_network.evaluate(board)
+        
+        probs = self.__softmax(p_scores, legal_move)
+        
+        node.expand(legal_move,probs)
+        
+        value = np.max(self.value_network.evaluate(board))
+        
+        return value       
+        
+    def __softmax(self, scores: np.ndarray, legal_move: np.ndarray) -> np.ndarray:
+        #合法手に対するスコアを確率に変換
+        scores = scores[legal_move] #合法手のみにする
+        scores = np.exp(scores - np.max(scores))
+        probs = scores / np.sum(scores)
+        
+        return probs
+        
+        
+        
             
         
         

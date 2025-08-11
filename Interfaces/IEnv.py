@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
+from const import EnvBackup
+
 class IEnv(ABC):
     @abstractmethod
     def reset(self) -> None:
@@ -23,11 +25,19 @@ class IEnv(ABC):
         pass
     
     @abstractmethod
-    def SetBoard(self, board: np.ndarray) -> None:
+    def GetBoard_CurrentPlayer(self) -> np.ndarray:
         pass
     
     @abstractmethod
     def GetLegalAction(self) -> np.ndarray:
+        pass
+    
+    @abstractmethod
+    def backup(self) -> EnvBackup:
+        pass
+    
+    @abstractmethod
+    def restore(self, data: EnvBackup):
         pass
     
     
