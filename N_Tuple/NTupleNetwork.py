@@ -3,8 +3,6 @@ import collections
 
 import os
 
-from N_Tuple.ReplayBuffer import Experience
-
 INF = 100
 
 # N-tupleの取り出し座標を作成

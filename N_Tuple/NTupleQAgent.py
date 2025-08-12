@@ -1,7 +1,6 @@
 import numpy as np
 
 from N_Tuple.NTupleNetwork import NTupleNetwork
-from N_Tuple.ReplayBuffer import ReplayBuffer
 
 
 BATCH_SIZE = 32
@@ -18,7 +17,6 @@ class NTupleQAgent:
         self.learning_rate = LEARNING_RATE
         self.gamma = GAMMA
         self.epsilon = eps
-        self.replay_buffer = ReplayBuffer(self.buffer_size, self.batch_size)
         self.ntuple_network = NTupleNetwork(board_size=board_size, ts = net_list, learning_rate=self.learning_rate)
 
         self.board_size = board_size
