@@ -63,7 +63,6 @@ class GomokuEnv(IEnv):
 
         # ゲームが終了した場合
         if done:
-            self.board.PrintBoard()
             if self.current_player == self.train_player:
                 reward += 1  # 黒が勝った
             else:

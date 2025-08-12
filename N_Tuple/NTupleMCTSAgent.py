@@ -10,7 +10,7 @@ BUFFER_SIZE = 10000
 LEARNING_RATE = 0.01
 GAMMA = 0.9
 
-SEARCH_TIME = 0.05
+SEARCH_TIME = 0.02
 
 CPUCT = 1.
 
@@ -121,7 +121,7 @@ class NTupleMCTSAgent:
         self.policy_net_path = model_path + "/" + POLICY_NET_PATH
         self.value_net_path = model_path + "/" + VALUE_NET_PATH
         
-    def Search(self) -> tuple[int, np.ndarray]:
+    def Search(self) -> tuple[tuple[int,int], np.ndarray]:
         
         dat = self.env.backup()
         start_time = time.time()
@@ -145,7 +145,6 @@ class NTupleMCTSAgent:
         
         policy_target = np.ones(self.board_size**2, np.float64)*-1
         policy_target[actions[indices]] = probs[indices]
-        
         
         return action, policy_target    
         

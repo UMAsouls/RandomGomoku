@@ -49,9 +49,6 @@ class NTupleGomokuEnv(GomokuEnv):
         arr = y*self.board_size + x
         
         return arr
-        
-    def SetBoard(self, b:np.ndarray) -> None:
-        self.board.SetBoard(b)
     
     # 盤面をキャリッジリターンで出力し、カーソルを改行分だけ上げる  
     def Animation(self):
@@ -64,15 +61,19 @@ class NTupleGomokuEnv(GomokuEnv):
         
     def backup(self):
         s = 1 if self.stone == Stone.BLACK else 2
-        
-        return EnvBackup(self.board, self.current_player, s, self.blackStones, self.whiteStones)
+        b = self.board.GetBoardInt()
+        o = self.board.GetBoardOppose()
+        return EnvBackup(b, o, self.current_player, s, self.blackStones, self.whiteStones)
         
     def restore(self, data: EnvBackup):
-        self.board.SetBoard(data.board)
+        self.board.SetBoard(data.board.copy(), data.oppose.copy())
         self.current_player = data.current_player
         self.stone = Stone.BLACK if data.stone == 1 else Stone.WHITE
         self.blackStones = data.blackStones
         self.whiteStones = data.whiteStones
+        
+    def PrintBoard(self):
+        self.board.PrintBoard()
         
 
 if __name__ == "__main__":

@@ -98,8 +98,10 @@ class FastBoard(IBoard):
         #ルール変更に対応
         self.AltRandomSet()
         
-    def SetBoard(self, board:np.ndarray) -> None:
+    def SetBoard(self, board:np.ndarray, opppose:np.ndarray) -> None:
         self.__board = board
+        self.__board_oppose = opppose
+        self.__board_wb = [self.__board, self.__board_oppose]
         
     def GetBoardInt(self) -> np.ndarray:
         return self.__board.copy()

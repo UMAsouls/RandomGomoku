@@ -8,7 +8,7 @@ class IBoard(ABC):
         pass
     
     @abstractmethod
-    def SetBoard(self, board:np.ndarray) -> np.ndarray:
+    def SetBoard(self, board:np.ndarray, opppose:np.ndarray) -> None:
         pass
     
     @abstractmethod

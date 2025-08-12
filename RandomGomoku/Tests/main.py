@@ -11,7 +11,7 @@ sys.path.append(path)
 
 print(os)
 
-from RandomGomoku.Tests.Board.test1 import Test
+from RandomGomoku.Tests.Board.test2 import Test
 
 if __name__ == "__main__":
     Test()

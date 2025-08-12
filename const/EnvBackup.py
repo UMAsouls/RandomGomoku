@@ -5,6 +5,7 @@ import numpy as np
 @dataclass
 class EnvBackup:
     board: np.ndarray
+    oppose: np.ndarray
     current_player: int
     stone: int
     blackStones: int

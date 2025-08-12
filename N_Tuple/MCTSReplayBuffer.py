@@ -8,6 +8,7 @@ class MCTSReplayBuffer:
         
         experience = np.dtype([
             ("state", np.int64, (board_size, board_size)),
+            ("action", np.int64),
             ("policies", np.float64, (board_size**2)),
             ("value", np.float64)
         ])
