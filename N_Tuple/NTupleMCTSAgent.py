@@ -12,7 +12,10 @@ GAMMA = 0.9
 
 SEARCH_TIME = 0.05
 
-CPUCT = 1.0
+CPUCT = 1.
+
+POLICY_NET_PATH = "PolicyNet"
+VALUE_NET_PATH = "ValueNet"
 
 class Node:
     def __init__(self, parent: "Node", prior_p: float, node_max: int):
@@ -91,7 +94,7 @@ class Node:
         
         return np.array([i.N for i in children], dtype=np.int64)
     
-    def GetActions(self) -> np.ndarray:
+    def GetLegalActions(self) -> np.ndarray:
         actions: np.ndarray = np.array(list(self._childs.keys()))
         
         return actions
@@ -115,10 +118,15 @@ class NTupleMCTSAgent:
         
         self.root = Node(None, 1.0, board_size**2)
         
-    def Search(self) -> int:
+        self.policy_net_path = model_path + "/" + POLICY_NET_PATH
+        self.value_net_path = model_path + "/" + VALUE_NET_PATH
+        
+    def Search(self) -> tuple[int, np.ndarray]:
         
         dat = self.env.backup()
         start_time = time.time()
+        
+        self.root = Node(None, 1.0, self.board_size**2)
         
         while time.time() - start_time < SEARCH_TIME:
             self.__search_once()
@@ -126,15 +134,20 @@ class NTupleMCTSAgent:
             
         
         N_values = self.root.GetChildrenNs()
-        actions = self.root.GetActions()
+        actions = self.root.GetLegalActions()
         max_n = np.max(N_values)
         indices = np.where(N_values == max_n)[0]
         
         action = actions[np.random.choice(indices)]
         
-        return action
-            
+        probs = N_values/self.root.N
+        indices = np.arange(actions.size)
         
+        policy_target = np.ones(self.board_size**2, np.float64)*-1
+        policy_target[actions[indices]] = probs[indices]
+        
+        
+        return action, policy_target    
         
     def __search_once(self) -> int:
         node = self.root
@@ -163,7 +176,7 @@ class NTupleMCTSAgent:
         legal_move = self.env.GetLegalAction()
         p_scores = self.policy_network.evaluate(board)
         
-        probs = self.__softmax(p_scores, legal_move)
+        probs = self.__softmax(p_scores[legal_move])
         
         node.expand(legal_move,probs)
         
@@ -171,13 +184,56 @@ class NTupleMCTSAgent:
         
         return value       
         
-    def __softmax(self, scores: np.ndarray, legal_move: np.ndarray) -> np.ndarray:
-        #合法手に対するスコアを確率に変換
-        scores = scores[legal_move] #合法手のみにする
+    def __softmax(self, scores: np.ndarray) -> np.ndarray:
+        #スコアを確率に変換
         scores = np.exp(scores - np.max(scores))
         probs = scores / np.sum(scores)
         
         return probs
+    
+    def train(self, state: np.ndarray, action: int, policies: np.ndarray, value: float) -> None:
+        self.policy_train(state, policies)
+        self.value_train(state, action, value)
+    
+    #方策の学習
+    def policy_train(self, state: np.ndarray, target: np.ndarray) -> None:
+        # ネットワークの現在の予測スコア(tanh後の値)を取得
+        predicted_scores = self.policy_network.evaluate(state)
+    
+        # targetが-1でない箇所が合法手
+        legal_actions = np.where(target >= 0)[0]
+    
+        # 合法手に対する予測スコアを抽出し、softmaxで確率に変換
+        predicted_policy_probs = self.__softmax(predicted_scores[legal_actions])
+    
+        # 正解の方策(MCTSの訪問回数分布)も合法手のみを抽出
+        target_policy_probs = target[legal_actions]
+    
+        # 予測と正解の誤差を計算 (交差エントロピー誤差の勾配)
+        errors = predicted_policy_probs - target_policy_probs
+    
+        # 各合法手について、それぞれの誤差で更新
+        # enumerateを使って、誤差配列のインデックス(i)とアクションID(act)を両方取得
+        for i,act in enumerate(legal_actions):
+            y = predicted_scores[act]
+            error = errors[i]
+            
+            self.policy_network.learn(state, act, error, y)
+    
+    #価値の学習        
+    def value_train(self, state: np.ndarray, action:int, target: float) -> None:
+        predict_value = np.max(self.value_network.evaluate(state))
+        error = target - predict_value
+        
+        self.value_network.learn(state, action, error, predict_value)
+        
+    def save(self) -> None:
+        self.policy_network.save(self.policy_net_path)
+        self.value_network.save(self.value_net_path)
+        
+    def load(self) -> None:
+        self.policy_network.load(self.policy_net_path)
+        self.value_network.load(self.value_net_path)
         
         
         

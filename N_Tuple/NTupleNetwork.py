@@ -183,6 +183,8 @@ class NTupleNetwork:
     def learn(self, board:np.ndarray, action: int, tderror: float, y:float) -> None:
         # q(s,a)はアクションを起こした後の盤面を評価したもの
         # 更新するのはアクション後の盤面でなければならない
+        
+        #マルチプロセスのことを考えてコピーをする
         update_state = board.copy()
         update_state[action//self.board_size, action%self.board_size] = 1
 

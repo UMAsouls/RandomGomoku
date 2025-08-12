@@ -9,15 +9,16 @@ class MCTSReplayBuffer:
         experience = np.dtype([
             ("state", np.int64, (board_size, board_size)),
             ("policies", np.float64, (board_size**2)),
-            ("value", np.int64)
+            ("value", np.float64)
         ])
         
         self.buffer = np.zeros(self.buffer_size, dtype= experience)
         self.index = 0  # 現在のインデックス
         self.size = 0
 
-    def add(self, state: np.ndarray, policy: np.ndarray, value: int) -> None:
+    def add(self, state: np.ndarray, action: int, policy: np.ndarray, value: int) -> None:
         self.buffer["state"][self.index] = state
+        self.buffer["action"][self.index] = action
         self.buffer["policies"][self.index] = policy
         self.buffer["value"][self.index] = value
         
@@ -39,7 +40,7 @@ class MCTSReplayBuffer:
 if __name__ == "__main__":
     buf = MCTSReplayBuffer(3,1,9)
     
-    buf.add(np.zeros((9,9)), np.zeros(9*9), 2)
-    buf.add(np.ones((9,9)), np.ones(9*9), 3)
+    buf.add(np.zeros((9,9)), 9, np.zeros(9*9), 2)
+    buf.add(np.ones((9,9)), 8, np.ones(9*9), 3)
     
     print(buf.get_batch()["value"])
