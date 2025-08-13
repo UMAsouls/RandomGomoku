@@ -76,6 +76,30 @@ class NTupleBoard:
         
         return score
     
+    def evaluate_batch(self, boards: np.ndarray) -> float:
+        num_boards = boards.shape[0]
+        if num_boards == 0:
+            return np.array([])
+
+        # 1. バッチ内の全盤面 x 全タプルの形状になるように座標と値を取得
+        #    NumPyの高度なブロードキャストとインデックス機能を利用
+        x_coords = self.tuples[:, :, 0]  # shape: (T, n) T=タプル総数
+        y_coords = self.tuples[:, :, 1]  # shape: (T, n)
+        
+        # (N, H, W) -> (N, T, n) へと値をマッピング
+        board_indices = np.arange(num_boards)[:, np.newaxis, np.newaxis]
+        values = boards[board_indices, y_coords[np.newaxis, :, :], x_coords[np.newaxis, :, :]]
+
+        # 2. 各盤面の各タプルのインデックスを一括計算
+        # (N, T, n) -> (N, T)
+        indices_batch = np.sum(values * self.powers_of_3, axis=2)
+
+        # 3. LUTからスコアを取得し、盤面ごとに合計する
+        # (N, T) -> (N,)
+        scores = np.sum(self.lut[indices_batch], axis=1)
+
+        return scores
+    
     def get_lut_indices_by_tuples(self, board: np.ndarray, tuples) -> np.ndarray:
         # shape: (board_size**2, n)
         x_coords = tuples[:, :, 0]
@@ -142,41 +166,37 @@ class NTupleNetwork:
     def define_tuples(self) -> None:
         for i in self.ts:
             self.add_all_dir_n_tuples(i)
+            
+    def get_next_boards(self, board: np.ndarray, legal_move: np.ndarray) -> np.ndarray:
+        num_legal = len(legal_move)
+        next_boards = np.repeat(board[np.newaxis, :, :], num_legal, axis=0)
+        
+        y_coords = legal_move//self.board_size
+        x_coords = legal_move%self.board_size
+        
+        next_boards[np.arange(num_legal), y_coords, x_coords] = 1
+        
+        return next_boards
         
     # 盤面の状態から選択可能な手を評価するメソッド
     def evaluate(self, board: np.ndarray) -> np.ndarray:
         scores = np.zeros((self.board_size**2), dtype=np.float64)
         
-        #元の状態のスコアを保存しておく
-        base_score = 0
-        for ntuple in self.n_tuples:
-            base_score += ntuple.evaluate(board)
+        legal_move = np.where(board.flatten() == 0)[0]
         
-        for i in range(self.board_size**2):
-            y = i // self.board_size
-            x = i % self.board_size
-            
-            if board[y, x] != 0:
-                scores[i] = -1*INF  # すでに石が置かれている場所はスコアを-∞に設定
-                continue
-            
-            # 行動した結果、どのように結果が変化したか差分を取る
-            base_value = 0
-            for ntuple in self.n_tuples:
-               base_value +=  ntuple.evaluate_xy(board, x, y)
-            
-            before_value = board[y, x]
-            board[y, x] = 1
-            next_value = 0
-            for ntuple in self.n_tuples:
-                next_value += ntuple.evaluate_xy(board, x, y)
-                
-            board[y, x] = before_value  # 元の状態に戻す
-            
-            # スコアをtanh関数で正規化
-            # ここではスコアを-1から1の範囲に収める
-            scores[i] = np.tanh(base_score - base_value + next_value)
-            
+        num_legal = len(legal_move)
+        if num_legal == 0:
+            return np.full(self.board_size**2, -INF, dtype=np.float64)
+
+        next_boards = self.get_next_boards(board,legal_move)
+        
+        next_values = np.zeros(num_legal, dtype=np.float64)
+        for ntuple in self.n_tuples:
+            next_values += ntuple.evaluate_batch(next_boards)
+        
+        scores = np.full(self.board_size**2, -INF, dtype=np.float64)
+        scores[legal_move] = np.tanh(next_values)
+        
         return scores
     
     
