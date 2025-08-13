@@ -1,18 +1,18 @@
 
 from N_Tuple import NTupleNetwork
+
+from N_Tuple.Debug import MCTSMemo
 from Interfaces import IEnv
 
 import numpy as np
 import time
 
-BATCH_SIZE = 32
-BUFFER_SIZE = 10000
 LEARNING_RATE = 0.01
 GAMMA = 0.9
 
-SEARCH_TIME = 0.02
+SEARCH_TIME = 0.05
 
-CPUCT = 1.
+CPUCT = 1.0
 
 POLICY_NET_PATH = "PolicyNet"
 VALUE_NET_PATH = "ValueNet"
@@ -108,7 +108,10 @@ class Node:
         
 
 class NTupleMCTSAgent:
-    def __init__(self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10]):
+    def __init__(
+        self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10],
+        cpuct:float = CPUCT, search_time: float = SEARCH_TIME
+        ):
         self.policy_network = NTupleNetwork(board_size, net_list, LEARNING_RATE)
         self.value_network = NTupleNetwork(board_size, net_list, LEARNING_RATE)
         
@@ -121,14 +124,26 @@ class NTupleMCTSAgent:
         self.policy_net_path = model_path + "/" + POLICY_NET_PATH
         self.value_net_path = model_path + "/" + VALUE_NET_PATH
         
+        self.cpuct = cpuct
+        self.search_time = search_time
+        
+        self.memo = MCTSMemo()
+        
+    def PrintMemo(self) -> None:
+        self.memo.PrintMemo()
+        
+    def ResetMemo(self) -> None:
+        self.memo.reset()
+        
     def Search(self) -> tuple[tuple[int,int], np.ndarray]:
+        self.memo.SearchStart()
         
         dat = self.env.backup()
         start_time = time.time()
         
         self.root = Node(None, 1.0, self.board_size**2)
         
-        while time.time() - start_time < SEARCH_TIME:
+        while time.time() - start_time < self.search_time:
             self.__search_once()
             self.env.restore(dat)
             
@@ -146,6 +161,7 @@ class NTupleMCTSAgent:
         policy_target = np.ones(self.board_size**2, np.float64)*-1
         policy_target[actions[indices]] = probs[indices]
         
+        self.memo.SearchEnd()
         return action, policy_target    
         
     def __search_once(self) -> int:
@@ -153,20 +169,28 @@ class NTupleMCTSAgent:
         done = False
         
         while not node.is_leaf:
-            act, node = node.select(CPUCT)
+            self.memo.SelectStart()
+            act, node = node.select(self.cpuct)
             
             (x,y) = (act%self.board_size, act//self.board_size)
             _, reward, done, _ = self.env.step((x,y))
+            self.memo.SelectEnd()
             
         if not done:
+            self.memo.ExpandStart()
             value = self.__expand_func(node)
+            self.memo.ExpandEnd()
         else:
             value = reward
-            
+        
+        depth = -1
         while node is not None:
             node.update(value=value)
             node = node.Parent
             value = -value
+            depth += 1
+            
+        self.memo.depth_max_set(depth)
             
             
     def __expand_func(self, node: Node) -> float:

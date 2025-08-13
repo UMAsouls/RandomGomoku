@@ -31,17 +31,16 @@ class MCTSReplayBuffer:
         return self.size
 
     def get_batch(self) -> np.ndarray:
-        buf = self.buffer[:self.size] if self.size < self.buffer_size else self.buffer  # 有効な部分だけを取得
-        
         indices = np.random.choice(self.size, self.batch_size, replace=False)
         
         return self.buffer[indices]
     
     
 if __name__ == "__main__":
-    buf = MCTSReplayBuffer(3,1,9)
+    buf = MCTSReplayBuffer(4,2,9)
     
     buf.add(np.zeros((9,9)), 9, np.zeros(9*9), 2)
     buf.add(np.ones((9,9)), 8, np.ones(9*9), 3)
+    buf.add(3*np.ones((9,9)), 7, 4*np.ones(9*9), 1)
     
-    print(buf.get_batch()["value"])
+    print(buf.get_batch())

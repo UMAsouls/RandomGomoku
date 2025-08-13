@@ -6,7 +6,7 @@ from NTupleGomokuEnv import NTupleGomokuEnv
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_10_2"
+MODEL_NAME = "S9Model8_13_3"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 NETS = [5]
@@ -18,10 +18,13 @@ EPOCHS = 10
 EPISODES = 100
 MAX_EPISODES = 1000000
 
+CPUCT = 5.0
+SEARCH_TIME = 0.04
+
 class NTupleMCTSTrainer:
     def __init__(self):
         self.env = NTupleGomokuEnv(BOARD_SIZE, "both")
-        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS)
+        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SEARCH_TIME)
         self.replay_buffer = MCTSReplayBuffer(REP_BUFFER_SIZE, BATCH_SIZE, BOARD_SIZE)
         
         self.epochs = EPOCHS
@@ -29,26 +32,28 @@ class NTupleMCTSTrainer:
         self.batch_size = BATCH_SIZE
         self.episodes = EPISODES
         
+        self.max_episodes = MAX_EPISODES
+        
     def run(self):
-        for i in range(self.episodes):
-            print(f"--- Self-Play Episode {i+1}/{self.episodes} ---")
+        epi = 0
+        while epi < self.max_episodes:
+            for i in range(self.episodes):
+                print(f"--- Self-Play Episode {epi+1}/{self.max_episodes} ---")
             
-            # 1. 自己対戦を行い、結果をReplayBufferに追加する
-            self.run_episode()
-            
-            print("episode end")
-            self.env.PrintBoard()
+                # 1. 自己対戦を行い、結果をReplayBufferに追加する
+                self.run_episode()
+                
+                epi += 1
         
                 
-        for i in range(self.epochs):
-            if len(self.replay_buffer) > self.batch_size:
-                print(f"--- Training Step {i+1}/{self.epochs} ---")
-                self.train_step()
+            for i in range(self.epochs):
+                if len(self.replay_buffer) > self.batch_size:
+                    print(f"--- Training Step {i+1}/{self.epochs} ---")
+                    self.train_step()
                 
             # 3. 定期的にモデルを保存する
-            if (i + 1) % 10 == 0:
-                print("Saving models...")
-                self.agent.save()
+            print("Saving models...")
+            self.agent.save()
                 
                 
         return self.episodes
@@ -63,6 +68,7 @@ class NTupleMCTSTrainer:
         
         current_player: int
         
+        self.agent.ResetMemo()
         while not done:
             # 現在の盤面、プレイヤー情報を取得
             board_state = self.env.GetBoard_CurrentPlayer()
@@ -82,6 +88,10 @@ class NTupleMCTSTrainer:
         #self.env.AnimationEnd()
         winner = current_player
         
+        print("episode end")
+        self.env.PrintBoard()
+        self.agent.PrintMemo()
+        
         for board_state, action, player, move_probs in game_history:
             game_value = 1 if player == winner else -1
             # バッファに追加
@@ -100,6 +110,4 @@ class NTupleMCTSTrainer:
             
 if __name__ == "__main__":
     trainer = NTupleMCTSTrainer()
-    epi = 0
-    while epi < MAX_EPISODES:
-        epi  += trainer.run()
+    trainer.run()
