@@ -33,6 +33,8 @@ class NTupleBoard:
 
         self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
         
+        self.tuples_flat = np.zeros(((board_size**2)*len(self.dirs), n), dtype=np.int32)
+        
     
     # 全方向に対してN-tuple（座標のリスト）を定義するメソッド
     def define_tuples(self) -> None:
@@ -60,6 +62,8 @@ class NTupleBoard:
                         self.xy_idx[dpos] += 1
 
             idx += 1
+            
+        self.tuples_flat = self.tuples[:, :, 1] * self.board_size + self.tuples[:, :, 0]  # shape (T, n)
         
     def evaluate(self, board: np.ndarray) -> float:
         # ボードの状態に基づいてルックアップテーブルのインデックスを取得
@@ -80,15 +84,9 @@ class NTupleBoard:
         num_boards = boards.shape[0]
         if num_boards == 0:
             return np.array([])
-
-        # 1. バッチ内の全盤面 x 全タプルの形状になるように座標と値を取得
-        #    NumPyの高度なブロードキャストとインデックス機能を利用
-        x_coords = self.tuples[:, :, 0]  # shape: (T, n) T=タプル総数
-        y_coords = self.tuples[:, :, 1]  # shape: (T, n)
         
-        # (N, H, W) -> (N, T, n) へと値をマッピング
-        board_indices = np.arange(num_boards)[:, np.newaxis, np.newaxis]
-        values = boards[board_indices, y_coords[np.newaxis, :, :], x_coords[np.newaxis, :, :]]
+        
+        values = np.take(boards, self.tuples_flat, axis=1)
 
         # 2. 各盤面の各タプルのインデックスを一括計算
         # (N, T, n) -> (N, T)
@@ -168,15 +166,14 @@ class NTupleNetwork:
             self.add_all_dir_n_tuples(i)
             
     def get_next_boards(self, board: np.ndarray, legal_move: np.ndarray) -> np.ndarray:
+        board_flat = board.ravel()
+        
         num_legal = len(legal_move)
-        next_boards = np.repeat(board[np.newaxis, :, :], num_legal, axis=0)
+        next_flat = np.repeat(board_flat[np.newaxis, :], num_legal, axis=0)
         
-        y_coords = legal_move//self.board_size
-        x_coords = legal_move%self.board_size
+        next_flat[np.arange(num_legal), legal_move] = 1
         
-        next_boards[np.arange(num_legal), y_coords, x_coords] = 1
-        
-        return next_boards
+        return next_flat
         
     # 盤面の状態から選択可能な手を評価するメソッド
     def evaluate(self, board: np.ndarray) -> np.ndarray:

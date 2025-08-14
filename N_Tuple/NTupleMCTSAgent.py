@@ -17,6 +17,8 @@ CPUCT = 1.0
 POLICY_NET_PATH = "PolicyNet"
 VALUE_NET_PATH = "ValueNet"
 
+PARAMETER_PATH = "PARAMETER"
+
 class Node:
     def __init__(self, parent: "Node", prior_p: float, node_max: int):
         #訪問回数
@@ -121,6 +123,7 @@ class NTupleMCTSAgent:
         
         self.root = Node(None, 1.0, board_size**2)
         
+        self.parameter_path = model_path + "/" + PARAMETER_PATH
         self.policy_net_path = model_path + "/" + POLICY_NET_PATH
         self.value_net_path = model_path + "/" + VALUE_NET_PATH
         
@@ -128,6 +131,8 @@ class NTupleMCTSAgent:
         self.search_time = search_time
         
         self.memo = MCTSMemo()
+        
+        self.search_player = 0
         
     def PrintMemo(self) -> None:
         self.memo.PrintMemo()

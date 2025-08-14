@@ -8,15 +8,15 @@ import time
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleQModel"
-MODEL_NAME = "MiniModel8_10_2"
+MODEL_NAME = "MiniModel8_14_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
-NETS = [5]
+NETS = [6]
 
 game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")
 agent = NTupleQAgent(board_size=game.board_size, model_path=MODEL_PATH, net_list=NETS)
 
-episodes = 10000
+episodes = 1000000
 save_rate = 5000
 
 for episode in range(episodes):
@@ -62,6 +62,7 @@ for episode in range(episodes):
         
         
     #game.AnimationEnd()
+    game.PrintBoard()
     episode_time = time.time() - t0
     print(f"Select Time: {select_time:.4f}s, Game Step Time: {game_step_time:.4f}s, Update Time: {update_time:.4f}s, Episode Time: {episode_time:.4f}s")
     print(f"Step: {step_num}step, Step Time: {(episode_time/step_num*1000):.4f}ms")
