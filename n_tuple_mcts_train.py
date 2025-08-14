@@ -3,23 +3,28 @@ from N_Tuple import NTupleMCTSAgent, MCTSReplayBuffer
 
 from NTupleGomokuEnv import NTupleGomokuEnv
 
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_13_3"
+MODEL_NAME = "S9Model8_15_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
+GRAPH_PATH = "pv_loss.png"
 
 NETS = [5]
 
-REP_BUFFER_SIZE = 100000
+REP_BUFFER_SIZE = 10000
 BATCH_SIZE = 100
 
-EPOCHS = 10
-EPISODES = 100
+EPOCHS = 5
+EPISODES = 10
 MAX_EPISODES = 1000000
 
-CPUCT = 5.0
-SEARCH_TIME = 0.04
+CPUCT = 1.0
+SEARCH_TIME = 0.1
 
 class NTupleMCTSTrainer:
     def __init__(self):
@@ -34,29 +39,51 @@ class NTupleMCTSTrainer:
         
         self.max_episodes = MAX_EPISODES
         
+        self.p_errors = np.zeros(MAX_EPISODES, dtype= np.float64)
+        self.v_errors = np.zeros(MAX_EPISODES, dtype= np.float64)
+        
+        self.e_idx = 0
+        
+        self.fig = plt.figure()
+        self.fig.suptitle("pv_loss")
+        
+        self.p_ax = self.fig.add_subplot(1,2,1)
+        self.v_ax = self.fig.add_subplot(1,2,2)
+                
     def run(self):
         epi = 0
         while epi < self.max_episodes:
-            for i in range(self.episodes):
-                print(f"--- Self-Play Episode {epi+1}/{self.max_episodes} ---")
+            print(f"--- Self-Play Episode {epi+1}/{self.max_episodes} ---")
+            # 1. 自己対戦を行い、結果をReplayBufferに追加する
+            self.run_episode()
+            epi += 1 
             
-                # 1. 自己対戦を行い、結果をReplayBufferに追加する
-                self.run_episode()
-                
-                epi += 1
-        
-                
             for i in range(self.epochs):
                 if len(self.replay_buffer) > self.batch_size:
                     print(f"--- Training Step {i+1}/{self.epochs} ---")
                     self.train_step()
+            
+            if(epi % self.episodes == 0):  
+                # 定期的にモデルを保存する
+                print("Saving models...")
+                self.agent.save()
+                self.save_loss()
                 
-            # 3. 定期的にモデルを保存する
-            print("Saving models...")
-            self.agent.save()
+                
                 
                 
         return self.episodes
+    
+    def save_loss(self):
+        self.p_errors[self.e_idx] /=  self.epochs*self.episodes
+        self.v_errors[self.e_idx] /=  self.epochs*self.episodes
+        
+        self.e_idx += 1
+        
+        self.p_ax.plot(self.p_errors, color = "blue", label = "policy")
+        self.v_ax.plot(self.v_errors, color = "red", label = "value")
+        
+        plt.savefig(f"{MODEL_PATH}/{GRAPH_PATH}")
         
         
     def run_episode(self):
@@ -104,8 +131,12 @@ class NTupleMCTSTrainer:
         
         idx = 0
         for board_state, action, target_policy, target_value in mini_batch:
-            self.agent.policy_train(board_state, target_policy)
-            self.agent.value_train(board_state, action, target_value) 
+            p_error = self.agent.policy_train(board_state, target_policy)
+            v_error = self.agent.value_train(board_state, action, target_value)
+            
+            self.p_errors[self.e_idx] += p_error
+            self.v_errors[self.e_idx] += v_error
+         
             
             
 if __name__ == "__main__":

@@ -247,6 +247,8 @@ class NTupleMCTSAgent:
             error = errors[i]
             
             self.policy_network.learn(state, act, error, y)
+            
+        return np.sum(errors)
     
     #価値の学習        
     def value_train(self, state: np.ndarray, action:int, target: float) -> None:
@@ -254,6 +256,8 @@ class NTupleMCTSAgent:
         error = target - predict_value
         
         self.value_network.learn(state, action, error, predict_value)
+        
+        return error
         
     def save(self) -> None:
         self.policy_network.save(self.policy_net_path)
