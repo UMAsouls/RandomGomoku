@@ -10,7 +10,7 @@ import matplotlib as mpl
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_15_2"
+MODEL_NAME = "S9Model8_15_3"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
@@ -26,7 +26,7 @@ MAX_EPISODES = 1000000
 CPUCT = 1.0
 #SEARCH_TIME = 0.1
 
-SIMULATION_TIME = 400
+SIMULATION_TIME = 200
 
 class NTupleMCTSTrainer:
     def __init__(self):
@@ -75,8 +75,8 @@ class NTupleMCTSTrainer:
         return self.episodes
     
     def save_loss(self):
-        self.p_errors[self.e_idx] /=  self.epochs*self.episodes
-        self.v_errors[self.e_idx] /=  self.epochs*self.episodes
+        self.p_errors[self.e_idx] /=  self.epochs*self.batch_size*self.episodes
+        self.v_errors[self.e_idx] /=  self.epochs*self.batch_size*self.episodes
         
         fig= plt.figure(figsize=(15, 5))
         fig.suptitle(f'PV_loss')
