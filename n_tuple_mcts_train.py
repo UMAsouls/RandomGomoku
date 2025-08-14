@@ -10,7 +10,7 @@ import matplotlib as mpl
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_15_1"
+MODEL_NAME = "S9Model8_15_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
@@ -20,16 +20,18 @@ REP_BUFFER_SIZE = 10000
 BATCH_SIZE = 100
 
 EPOCHS = 5
-EPISODES = 10
+EPISODES = 100
 MAX_EPISODES = 1000000
 
 CPUCT = 1.0
-SEARCH_TIME = 0.1
+#SEARCH_TIME = 0.1
+
+SIMULATION_TIME = 400
 
 class NTupleMCTSTrainer:
     def __init__(self):
         self.env = NTupleGomokuEnv(BOARD_SIZE, "both")
-        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SEARCH_TIME)
+        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SIMULATION_TIME)
         self.replay_buffer = MCTSReplayBuffer(REP_BUFFER_SIZE, BATCH_SIZE, BOARD_SIZE)
         
         self.epochs = EPOCHS
@@ -39,16 +41,14 @@ class NTupleMCTSTrainer:
         
         self.max_episodes = MAX_EPISODES
         
-        self.p_errors = np.zeros(MAX_EPISODES, dtype= np.float64)
-        self.v_errors = np.zeros(MAX_EPISODES, dtype= np.float64)
+        self.p_errors = [0]
+        self.v_errors = [0]
         
         self.e_idx = 0
         
-        self.fig = plt.figure()
-        self.fig.suptitle("pv_loss")
+        plt.rcParams["font.size"] = 12
         
-        self.p_ax = self.fig.add_subplot(1,2,1)
-        self.v_ax = self.fig.add_subplot(1,2,2)
+        
                 
     def run(self):
         epi = 0
@@ -78,12 +78,37 @@ class NTupleMCTSTrainer:
         self.p_errors[self.e_idx] /=  self.epochs*self.episodes
         self.v_errors[self.e_idx] /=  self.epochs*self.episodes
         
-        self.e_idx += 1
+        fig= plt.figure(figsize=(15, 5))
+        fig.suptitle(f'PV_loss')
         
-        self.p_ax.plot(self.p_errors, color = "blue", label = "policy")
-        self.v_ax.plot(self.v_errors, color = "red", label = "value")
+        ax1 = fig.add_subplot(1,2,1)
+        ax2 = fig.add_subplot(1,2,2)
+
+        # Policy Loss
+        ax1.plot(self.p_errors, color="blue", label="Policy Loss")
+        ax1.set_xlabel("Training Epochs")
+        ax1.set_ylabel("Average Loss")
+        ax1.set_title("Policy Network Loss")
+        ax1.legend()
+        ax1.grid(True)
+
+        # Value Loss
+        ax2.plot(self.v_errors, color="red", label="Value Loss")
+        ax2.set_xlabel("Training Epochs")
+        ax2.set_ylabel("Average Loss")
+        ax2.set_title("Value Network Loss")
+        ax2.legend()
+        ax2.grid(True)
         
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.savefig(f"{MODEL_PATH}/{GRAPH_PATH}")
+        
+        plt.close(fig) # メモリ解放のために図を閉じる
+        print(f"Loss plot saved to {MODEL_PATH}/{GRAPH_PATH}")
+        
+        self.e_idx += 1
+        self.p_errors.append(0)
+        self.v_errors.append(0)
         
         
     def run_episode(self):

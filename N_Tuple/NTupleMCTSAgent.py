@@ -10,7 +10,7 @@ import time
 LEARNING_RATE = 0.01
 GAMMA = 0.9
 
-SEARCH_TIME = 0.05
+SIMULATION_TIME = 100
 
 CPUCT = 1.0
 
@@ -112,7 +112,7 @@ class Node:
 class NTupleMCTSAgent:
     def __init__(
         self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10],
-        cpuct:float = CPUCT, search_time: float = SEARCH_TIME
+        cpuct:float = CPUCT, simulation_time: int = 100
         ):
         self.policy_network = NTupleNetwork(board_size, net_list, LEARNING_RATE)
         self.value_network = NTupleNetwork(board_size, net_list, LEARNING_RATE)
@@ -128,7 +128,7 @@ class NTupleMCTSAgent:
         self.value_net_path = model_path + "/" + VALUE_NET_PATH
         
         self.cpuct = cpuct
-        self.search_time = search_time
+        self.simulation_time = simulation_time
         
         self.memo = MCTSMemo()
         
@@ -148,7 +148,7 @@ class NTupleMCTSAgent:
         
         self.root = Node(None, 1.0, self.board_size**2)
         
-        while time.time() - start_time < self.search_time:
+        for i in range(self.simulation_time):
             self.__search_once()
             self.env.restore(dat)
             
