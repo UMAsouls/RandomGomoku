@@ -80,19 +80,23 @@ class NTupleBoard:
         
         return score
     
+    def get_lut_indices_by_batch(self, boards) -> np.ndarray:
+        values = np.take(boards, self.tuples_flat, axis=1)
+
+        # 各盤面の各タプルのインデックスを一括計算
+        # (N, T, n) -> (N, T)
+        indices_batch = np.sum(values * self.powers_of_3, axis=2)
+        
+        return indices_batch
+    
     def evaluate_batch(self, boards: np.ndarray) -> float:
         num_boards = boards.shape[0]
         if num_boards == 0:
             return np.array([])
         
+        indices_batch = self.get_lut_indices_by_batch(boards)
         
-        values = np.take(boards, self.tuples_flat, axis=1)
-
-        # 2. 各盤面の各タプルのインデックスを一括計算
-        # (N, T, n) -> (N, T)
-        indices_batch = np.sum(values * self.powers_of_3, axis=2)
-
-        # 3. LUTからスコアを取得し、盤面ごとに合計する
+        # LUTからスコアを取得し、盤面ごとに合計する
         # (N, T) -> (N,)
         scores = np.sum(self.lut[indices_batch], axis=1)
 

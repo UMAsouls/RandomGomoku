@@ -19,6 +19,10 @@ VALUE_NET_PATH = "ValueNet"
 
 PARAMETER_PATH = "PARAMETER"
 
+#ディリクレノイズ作成
+EPSILON = 0.25
+ALPHA = 0.3
+
 class Node:
     def __init__(self, parent: "Node", prior_p: float, node_max: int):
         #訪問回数
@@ -205,6 +209,10 @@ class NTupleMCTSAgent:
         p_scores = self.policy_network.evaluate(board)
         
         probs = self.__softmax(p_scores[legal_move])
+        
+        if(node == self.root):
+            noise = np.random.dirichlet([ALPHA]*len(probs))
+            probs = (1-EPSILON)*probs*EPSILON*noise
         
         node.expand(legal_move,probs)
         
