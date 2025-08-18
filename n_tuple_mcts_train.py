@@ -6,11 +6,12 @@ from NTupleGomokuEnv import NTupleGomokuEnv
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import os
 
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_15_3"
+MODEL_NAME = "S9Model8_18_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
@@ -21,17 +22,21 @@ BATCH_SIZE = 100
 
 EPOCHS = 5
 EPISODES = 100
-MAX_EPISODES = 1000000
+MAX_EPISODES = 100000
+
+PV_SAVERATE = 10
 
 CPUCT = 1.0
 #SEARCH_TIME = 0.1
 
 SIMULATION_TIME = 200
 
+LEARNING_RATE = 0.01
+
 class NTupleMCTSTrainer:
     def __init__(self):
         self.env = NTupleGomokuEnv(BOARD_SIZE, "both")
-        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SIMULATION_TIME)
+        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SIMULATION_TIME, LEARNING_RATE)
         self.replay_buffer = MCTSReplayBuffer(REP_BUFFER_SIZE, BATCH_SIZE, BOARD_SIZE)
         
         self.epochs = EPOCHS
@@ -45,6 +50,8 @@ class NTupleMCTSTrainer:
         self.v_errors = [0]
         
         self.e_idx = 0
+        
+        self.pv_saverate = PV_SAVERATE
         
         plt.rcParams["font.size"] = 12
         
@@ -67,16 +74,17 @@ class NTupleMCTSTrainer:
                 # 定期的にモデルを保存する
                 print("Saving models...")
                 self.agent.save()
-                self.save_loss()
                 
+            if(epi % self.pv_saverate == 0): 
+                self.save_loss()
                 
                 
                 
         return self.episodes
     
     def save_loss(self):
-        self.p_errors[self.e_idx] /=  self.epochs*self.batch_size*self.episodes
-        self.v_errors[self.e_idx] /=  self.epochs*self.batch_size*self.episodes
+        self.p_errors[self.e_idx] /=  self.epochs*self.batch_size*self.pv_saverate
+        self.v_errors[self.e_idx] /=  self.epochs*self.batch_size*self.pv_saverate
         
         fig= plt.figure(figsize=(15, 5))
         fig.suptitle(f'PV_loss')
@@ -101,6 +109,11 @@ class NTupleMCTSTrainer:
         ax2.grid(True)
         
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        
+        save_dir = os.path.dirname(f"{MODEL_PATH}/{GRAPH_PATH}")
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+        
         plt.savefig(f"{MODEL_PATH}/{GRAPH_PATH}")
         
         plt.close(fig) # メモリ解放のために図を閉じる

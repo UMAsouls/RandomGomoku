@@ -60,7 +60,7 @@ class NTupleQAgent:
         
         # next_stateは相手から見た盤面 → マイナスする
         tdtarget = reward - (1 - done) * self.gamma * np.max(self.ntuple_network.evaluate(next_state))
-        tderror = tdtarget - qs[action]
+        tderror = qs[action] - tdtarget
         
         self.ntuple_network.learn(state, action, tderror, qs[action])
 

@@ -130,7 +130,7 @@ class NTupleBoard:
         indices = self.get_lut_indices(board)
         #yはモデルの出力値（tanh関数を通したスコア）
         #テーブルではなく関数近似だから、更新式が少し違う
-        self.lut[indices] += lr * tderror * (1- y**2)    
+        self.lut[indices] -= lr * tderror * (1- y**2)    
 
     def get_tuples(self):
         return self.tuples
@@ -236,6 +236,5 @@ class NTupleNetwork:
 
         for i in self.n_tuples:
             i.save(dir_path + "/model" + str(i.n) + ".npy")
-
             
             

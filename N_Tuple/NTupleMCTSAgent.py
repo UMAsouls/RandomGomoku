@@ -112,10 +112,10 @@ class Node:
 class NTupleMCTSAgent:
     def __init__(
         self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10],
-        cpuct:float = CPUCT, simulation_time: int = 100
+        cpuct:float = CPUCT, simulation_time: int = 100, lr: float = LEARNING_RATE
         ):
-        self.policy_network = NTupleNetwork(board_size, net_list, LEARNING_RATE)
-        self.value_network = NTupleNetwork(board_size, net_list, LEARNING_RATE)
+        self.policy_network = NTupleNetwork(board_size, net_list, lr)
+        self.value_network = NTupleNetwork(board_size, net_list, lr)
         
         self.env = env
         
@@ -248,7 +248,12 @@ class NTupleMCTSAgent:
             
             self.policy_network.learn(state, act, error, y)
             
-        return np.sum(errors)
+         # 交差エントロピー誤差を計算して返す
+        # log(0) を防ぐために微小な値(epsilon)を加える
+        epsilon = 1e-9
+        cross_entropy_loss = -np.average(target_policy_probs * np.log(predicted_policy_probs + epsilon))
+            
+        return cross_entropy_loss
     
     #価値の学習        
     def value_train(self, state: np.ndarray, action:int, target: float) -> None:
@@ -257,7 +262,9 @@ class NTupleMCTSAgent:
         
         self.value_network.learn(state, action, error, predict_value)
         
-        return error
+        sq_loss = error**2
+        
+        return sq_loss
         
     def save(self) -> None:
         self.policy_network.save(self.policy_net_path)
