@@ -25,7 +25,7 @@ EPSILON = 0.25
 ALPHA = 0.3
 
 class Node:
-    def __init__(self, parent: "Node", prior_p: float, node_max: int):
+    def __init__(self, parent: "Node", prior_p: float, node_max: int, p_idx: int):
         #訪問回数
         self._N = 0
         #勝利回数
@@ -36,11 +36,16 @@ class Node:
         
         #親ノード
         self._parent: "Node" = parent
+        self.p_idx = p_idx
         #子ノード
         self._childs: dict[int,"Node"] = {}
         
         #ノードの限界
         self.node_max = node_max
+        
+        self.N_values: np.ndarray
+        self.Q_values: np.ndarray
+        self.P_values: np.ndarray
         
         
     @property
@@ -64,15 +69,19 @@ class Node:
     def Parent(self) -> "Node":
         return self._parent
     
+    def update_child(self, N: int, Q: float, idx: int):
+        self.N_values[idx] = N
+        self.Q_values[idx] = Q
+        
     
     def select(self, c_puct: float) -> tuple[int,"Node"]:
         actions: list[int]
         children: list["Node"]
         actions, children = zip(*self._childs.items())
         
-        N_values = np.array([i.N for i in children], dtype=np.int64)
-        Q_values = np.array([i.Q for i in children], dtype=np.float64)
-        P_values = np.array([i.P for i in children], dtype=np.float64)
+        N_values = self.N_values
+        Q_values = self.Q_values
+        P_values = self.P_values
         
         U_values: np.ndarray = c_puct *  P_values * (np.sqrt(self._N)/(1+N_values))
         
@@ -88,13 +97,21 @@ class Node:
         return best_action, best_node
     
     def expand(self, acts: list[int], probs: list[float]) -> None:
-        nodes = [Node(self, p, self.node_max) for p in probs]
+        nodes = [Node(self, p, self.node_max, idx) for idx,p in enumerate(probs)]
+        
+        num_children = len(nodes)
+        self.N_values = np.zeros(num_children, dtype=np.int64)
+        self.Q_values = np.zeros(num_children, dtype=np.float64)
+        self.P_values = np.array(probs, dtype=np.float64)
         
         self._childs = dict(zip(acts,nodes))
         
     def update(self, value: float) -> None:
         self._N += 1
         self._W += value
+        
+        if(self._parent is not None):
+            self._parent.update_child(self.N, self.Q, self.p_idx)
         
     def GetChildrenNs(self) -> np.ndarray:
         children: list["Node"] = list(self._childs.values())
@@ -125,7 +142,7 @@ class NTupleMCTSAgent:
         
         self.board_size = board_size
         
-        self.root = Node(None, 1.0, board_size**2)
+        self.root = Node(None, 1.0, board_size**2, -1)
         
         self.parameter_path = model_path + "/" + PARAMETER_PATH
         self.pv_net_path = model_path + "/" + PV_NET_PATH
@@ -149,7 +166,7 @@ class NTupleMCTSAgent:
         dat = self.env.backup()
         start_time = time.time()
         
-        self.root = Node(None, 1.0, self.board_size**2)
+        self.root = Node(None, 1.0, self.board_size**2, -1)
         
         for i in range(self.simulation_time):
             self.__search_once()
