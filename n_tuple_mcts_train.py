@@ -11,16 +11,16 @@ import os
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_18_1"
+MODEL_NAME = "S9Model8_19_4"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
 NETS = [5]
 
-REP_BUFFER_SIZE = 10000
-BATCH_SIZE = 100
+REP_BUFFER_SIZE = 500000
+BATCH_SIZE = 1024
 
-EPOCHS = 5
+EPOCHS = 1
 EPISODES = 100
 MAX_EPISODES = 100000
 
@@ -29,7 +29,7 @@ PV_SAVERATE = 10
 CPUCT = 1.0
 #SEARCH_TIME = 0.1
 
-SIMULATION_TIME = 200
+SIMULATION_TIME = 400
 
 LEARNING_RATE = 0.01
 
@@ -48,6 +48,8 @@ class NTupleMCTSTrainer:
         
         self.p_errors = [0]
         self.v_errors = [0]
+        
+        self.error_add_time = 0
         
         self.e_idx = 0
         
@@ -75,7 +77,7 @@ class NTupleMCTSTrainer:
                 print("Saving models...")
                 self.agent.save()
                 
-            if(epi % self.pv_saverate == 0): 
+            if(epi % self.pv_saverate == 0 and self.error_add_time > 0): 
                 self.save_loss()
                 
                 
@@ -83,8 +85,8 @@ class NTupleMCTSTrainer:
         return self.episodes
     
     def save_loss(self):
-        self.p_errors[self.e_idx] /=  self.epochs*self.batch_size*self.pv_saverate
-        self.v_errors[self.e_idx] /=  self.epochs*self.batch_size*self.pv_saverate
+        self.p_errors[self.e_idx] /=  self.error_add_time
+        self.v_errors[self.e_idx] /=  self.error_add_time
         
         fig= plt.figure(figsize=(15, 5))
         fig.suptitle(f'PV_loss')
@@ -120,6 +122,7 @@ class NTupleMCTSTrainer:
         print(f"Loss plot saved to {MODEL_PATH}/{GRAPH_PATH}")
         
         self.e_idx += 1
+        self.error_add_time = 0
         self.p_errors.append(0)
         self.v_errors.append(0)
         
@@ -169,12 +172,12 @@ class NTupleMCTSTrainer:
         
         idx = 0
         for board_state, action, target_policy, target_value in mini_batch:
-            p_error = self.agent.policy_train(board_state, target_policy)
-            v_error = self.agent.value_train(board_state, action, target_value)
+            p_error, v_error = self.agent.train(board_state,target_policy, target_value)
             
             self.p_errors[self.e_idx] += p_error
             self.v_errors[self.e_idx] += v_error
-         
+            self.error_add_time += 1
+                  
             
             
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 
-from N_Tuple import NTupleNetwork
+from N_Tuple import NTupleNetwork, NTuplePVNetwork
 
 from N_Tuple.Debug import MCTSMemo
 from Interfaces import IEnv
@@ -16,6 +16,7 @@ CPUCT = 1.0
 
 POLICY_NET_PATH = "PolicyNet"
 VALUE_NET_PATH = "ValueNet"
+PV_NET_PATH = "PVNet"
 
 PARAMETER_PATH = "PARAMETER"
 
@@ -118,8 +119,7 @@ class NTupleMCTSAgent:
         self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10],
         cpuct:float = CPUCT, simulation_time: int = 100, lr: float = LEARNING_RATE
         ):
-        self.policy_network = NTupleNetwork(board_size, net_list, lr)
-        self.value_network = NTupleNetwork(board_size, net_list, lr)
+        self.pv_network = NTuplePVNetwork(board_size, net_list, lr)
         
         self.env = env
         
@@ -128,8 +128,7 @@ class NTupleMCTSAgent:
         self.root = Node(None, 1.0, board_size**2)
         
         self.parameter_path = model_path + "/" + PARAMETER_PATH
-        self.policy_net_path = model_path + "/" + POLICY_NET_PATH
-        self.value_net_path = model_path + "/" + VALUE_NET_PATH
+        self.pv_net_path = model_path + "/" + PV_NET_PATH
         
         self.cpuct = cpuct
         self.simulation_time = simulation_time
@@ -167,7 +166,7 @@ class NTupleMCTSAgent:
         probs = N_values/self.root.N
         indices = np.arange(actions.size)
         
-        policy_target = np.ones(self.board_size**2, np.float64)*-1
+        policy_target = np.full(self.board_size**2, -1, np.float64)
         policy_target[actions[indices]] = probs[indices]
         
         self.memo.SearchEnd()
@@ -205,18 +204,16 @@ class NTupleMCTSAgent:
     def __expand_func(self, node: Node) -> float:
         board: np.ndarray = self.env.GetBoard_CurrentPlayer()
         
-        legal_move = self.env.GetLegalAction()
-        p_scores = self.policy_network.evaluate(board)
+        p_scores, value = self.pv_network.evaluatePV(board)
         
+        legal_move = self.env.GetLegalAction()
         probs = self.__softmax(p_scores[legal_move])
         
         if(node == self.root):
             noise = np.random.dirichlet([ALPHA]*len(probs))
-            probs = (1-EPSILON)*probs*EPSILON*noise
+            probs = (1-EPSILON)*probs + EPSILON*noise
         
         node.expand(legal_move,probs)
-        
-        value = np.max(self.value_network.evaluate(board))
         
         return value       
         
@@ -227,60 +224,45 @@ class NTupleMCTSAgent:
         
         return probs
     
-    def train(self, state: np.ndarray, action: int, policies: np.ndarray, value: float) -> None:
-        self.policy_train(state, policies)
-        self.value_train(state, action, value)
-    
-    #方策の学習
-    def policy_train(self, state: np.ndarray, target: np.ndarray) -> None:
-        # ネットワークの現在の予測スコア(tanh後の値)を取得
-        predicted_scores = self.policy_network.evaluate(state)
-    
-        # targetが-1でない箇所が合法手
-        legal_actions = np.where(target >= 0)[0]
-    
-        # 合法手に対する予測スコアを抽出し、softmaxで確率に変換
-        predicted_policy_probs = self.__softmax(predicted_scores[legal_actions])
-    
-        # 正解の方策(MCTSの訪問回数分布)も合法手のみを抽出
-        target_policy_probs = target[legal_actions]
-    
-        # 予測と正解の誤差を計算 (交差エントロピー誤差の勾配)
-        errors = predicted_policy_probs - target_policy_probs
-    
-        # 各合法手について、それぞれの誤差で更新
-        # enumerateを使って、誤差配列のインデックス(i)とアクションID(act)を両方取得
-        for i,act in enumerate(legal_actions):
-            y = predicted_scores[act]
-            error = errors[i]
-            
-            self.policy_network.learn(state, act, error, y)
-            
-         # 交差エントロピー誤差を計算して返す
+    def train(self, state: np.ndarray, policies: np.ndarray, value: float) -> tuple[float, float]:
+        pred_ps, pred_v = self.pv_network.evaluatePV(state)
+        
+        p_costs,p_loss = self.get_policy_costs_loss(state, policies, pred_ps)
+        v_cost,v_loss = self.get_value_cost_loss(state, value, pred_v)
+        
+        self.pv_network.learnPV(state, p_costs, v_cost, pred_v)
+        
+        return p_loss, v_loss
+        
+    def get_policy_costs_loss(self, state: np.ndarray, target: np.ndarray, pred_ps:np.ndarray) -> tuple[np.ndarray, float]:
+        legal_moves = np.where(state.flatten() == 0)[0]
+        pred_probs = self.__softmax(pred_ps[legal_moves])
+        
+        target_probs = target[legal_moves]
+        
+        indices = np.arange(len(legal_moves))
+        
+        p_costs = np.full(self.board_size**2, 0, dtype=np.float64)
+        p_costs[legal_moves[indices]] = pred_probs[indices] - target_probs[indices]
+        
+        # 交差エントロピー誤差を計算して返す
         # log(0) を防ぐために微小な値(epsilon)を加える
         epsilon = 1e-9
-        cross_entropy_loss = -np.average(target_policy_probs * np.log(predicted_policy_probs + epsilon))
-            
-        return cross_entropy_loss
+        cross_entropy_loss = -np.average(target_probs * np.log(pred_probs + epsilon))
+        
+        return p_costs, cross_entropy_loss
     
-    #価値の学習        
-    def value_train(self, state: np.ndarray, action:int, target: float) -> None:
-        predict_value = np.max(self.value_network.evaluate(state))
-        error = target - predict_value
+    def get_value_cost_loss(self, state: np.ndarray, target: float, pred_v:float) -> tuple[float, float]:
+        v_cost = pred_v - target
+        v_loss = v_cost**2
         
-        self.value_network.learn(state, action, error, predict_value)
-        
-        sq_loss = error**2
-        
-        return sq_loss
+        return v_cost, v_loss
         
     def save(self) -> None:
-        self.policy_network.save(self.policy_net_path)
-        self.value_network.save(self.value_net_path)
+        self.pv_network.save(self.pv_net_path)
         
     def load(self) -> None:
-        self.policy_network.load(self.policy_net_path)
-        self.value_network.load(self.value_net_path)
+        self.pv_network.load(self.pv_net_path)
         
         
         

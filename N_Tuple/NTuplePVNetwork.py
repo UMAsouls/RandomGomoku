@@ -3,7 +3,7 @@ from N_Tuple.NTupleNetwork import NTupleBoard
 
 import numpy as np
 
-INF = 100
+INF = 100000000
 
 class NTuplePVBoard(NTupleBoard):
     def __init__(self, n: int, board_size: int, p_dim: int) -> None:
@@ -29,8 +29,7 @@ class NTuplePVBoard(NTupleBoard):
 
         costs = np.insert(p_costs, 0, v_cost)
         
-        arr = np.arange(len(costs))
-        self.lut[indices, arr] -= lr * costs[arr]
+        self.lut[indices]-= lr * costs
         
         
 
@@ -55,15 +54,14 @@ class NTuplePVNetwork(NTupleNetwork):
             
         return policies, np.tanh(value)
     
-    def learnPV(self, board: np.ndarray, p_losses: np.ndarray, v_loss: float, v_raw: float = -INF):
+    def learnPV(self, board: np.ndarray, p_costs: np.ndarray, v_cost: float, v_raw: float = -INF):
         v_y: float
         if(v_raw == -INF): _, v_y = self.evaluatePV(board)
         else: v_y = v_raw
         
-        p_costs = p_losses
-        v_cost = v_loss*(1-v_y**2)
+        v_cost = v_cost*(1-v_y**2)
         
         for i in self.n_tuples:
-            i.learnPV(board, p_costs, v_cost)
+            i.learnPV(board, p_costs, v_cost, self.learning_rate)
         
     
