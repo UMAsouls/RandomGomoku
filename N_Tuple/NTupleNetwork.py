@@ -102,6 +102,20 @@ class NTupleBoard:
 
         return scores
     
+    def get_lut_indices_by_xy_tuples(self, board: np.ndarray) -> np.ndarray:
+        x_coords = self.tuples_xy[..., 0]
+        y_coords = self.tuples_xy[..., 1]
+        
+        values = board[y_coords, x_coords]
+        
+        mask = np.arange(self.n*len(self.dirs)) < self.xy_idx[:,np.newaxis]
+        
+        masked_values = np.where(mask[:, :, np.newaxis], values, 0)
+        
+        indices = np.sum(masked_values * self.powers_of_3, axis=2)
+        
+        return indices
+    
     def get_lut_indices_by_tuples(self, board: np.ndarray, tuples) -> np.ndarray:
         # shape: (board_size**2, n)
         x_coords = tuples[:, :, 0]
