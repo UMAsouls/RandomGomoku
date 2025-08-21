@@ -9,27 +9,46 @@ class NTuplePVBoard(NTupleBoard):
     def __init__(self, n: int, board_size: int, p_dim: int) -> None:
         super().__init__(n,board_size)
         
-        self.lut: np.ndarray = np.zeros((3**n, 1+p_dim), dtype=np.float64)
+        self.lut: np.ndarray = np.zeros((3**n, 1+1+self.n), dtype=np.float64)
         
     def evaluatePV(self, board) -> tuple[np.ndarray, float]:
         # ボードの状態に基づいてルックアップテーブルのインデックスを取得
         indices = self.get_lut_indices(board)
         
-        # ルックアップテーブルからスコアを取得
-        scores:np.ndarray = np.sum(self.lut[indices], axis=0)
+        xy_indices = self.get_lut_indices_by_xy_tuples(board)
         
-        value = scores[0]
-        policies = scores[1:]
+        # ルックアップテーブルからスコアを取得
+        value = np.sum(self.lut[:,0][indices])
+        
+        base_p = np.sum(self.lut[:,1][indices])
+        policies = np.full(self.board_size**2, base_p, dtype=np.float64)
+        
+        bef_ps = self.lut[xy_indices, 1]
+        aft_ps = self.lut[xy_indices, 2+self.xy_tuples_pos]
+        
+        delta_ps = np.where(self.xy_tuples_mask, aft_ps-bef_ps, 0)
+        
+        delta = np.sum(delta_ps, axis=1)
+        
+        policies += delta
         
         return policies, value
         
     
     def learnPV(self, board: np.ndarray, p_costs: np.ndarray, v_cost: float, lr: float):
         indices = self.get_lut_indices(board)
-
-        costs = np.insert(p_costs, 0, v_cost)
         
-        self.lut[indices]-= lr * costs
+        xy_indices = self.get_lut_indices_by_xy_tuples(board)
+        
+        self.lut[indices,0]-= lr * v_cost
+        
+        self.lut[indices,1] -= lr * np.sum(p_costs)
+        
+        ps = np.repeat(lr*p_costs[:,np.newaxis], xy_indices.shape[1], axis=-1)
+        ps = np.where(self.xy_tuples_mask, ps, 0)
+        self.lut[xy_indices, 1] += ps
+        self.lut[xy_indices, 2+self.xy_tuples_pos] -= ps
+        
         
         
 

@@ -24,16 +24,40 @@ class NTupleBoard:
         self.tuples = np.zeros(((board_size**2)*len(self.dirs), n, 2), dtype=np.int32)
         self.lut: np.ndarray = np.zeros((3**n), dtype=np.float64)  # ルックアップテーブルの初期化
         
-        self.tuples_xy = np.zeros((board_size**2, n*len(self.dirs), n, 2), dtype=np.int32)
+        self.tuples_xy = np.full((board_size**2, n*len(self.dirs), n, 2), -1, dtype=np.int32)
+        self.xy_tuples_pos = np.zeros((board_size**2, n*len(self.dirs)), dtype=np.int32)
+        self.xy_tuples_mask = np.zeros((board_size**2, n*len(self.dirs)), dtype=np.bool_)
         
         # shape: (n,)
         self.powers_of_3 = np.power(3, np.arange(self.n)[::-1])
         
         self.xy_idx = np.zeros((self.board_size**2), dtype=np.int32)
+        
+        self.tuples_flat = np.zeros(((board_size**2)*len(self.dirs), n), dtype=np.int32)
 
         self.define_tuples()  # N-tupleの定義とルックアップテーブルの初期化
         
-        self.tuples_flat = np.zeros(((board_size**2)*len(self.dirs), n), dtype=np.int32)
+    def make_mask(self, xy_indices: np.ndarray) -> None:
+        arr = np.arange(self.tuples_xy.shape[1])
+        self.xy_tuples_mask = arr < xy_indices[:, np.newaxis]
+        
+    def search_xy_tuple_pos(self) -> None:
+        x = np.arange(self.board_size)
+        y = np.arange(self.board_size)
+        
+        xx, yy = np.meshgrid(x, y, indexing="ij")
+        pos = np.stack((xx, yy), axis = -1)
+        
+        pos = pos.reshape(pos.shape[0]*pos.shape[1], pos.shape[2])
+        
+        w1, w2, w3, i = np.where(self.tuples_xy == pos[:, np.newaxis, np.newaxis, :])
+        
+        indices = np.where(i == 0)[0]
+        w1 = w1[indices]
+        w2 = w2[indices]
+        w3 = w3[indices]
+        
+        self.xy_tuples_pos[w1, w2] = w3
         
     
     # 全方向に対してN-tuple（座標のリスト）を定義するメソッド
@@ -64,6 +88,9 @@ class NTupleBoard:
             idx += 1
             
         self.tuples_flat = self.tuples[:, :, 1] * self.board_size + self.tuples[:, :, 0]  # shape (T, n)
+        self.make_mask(self.xy_idx)
+        self.search_xy_tuple_pos()
+        
         
     def evaluate(self, board: np.ndarray) -> float:
         # ボードの状態に基づいてルックアップテーブルのインデックスを取得
@@ -108,9 +135,7 @@ class NTupleBoard:
         
         values = board[y_coords, x_coords]
         
-        mask = np.arange(self.n*len(self.dirs)) < self.xy_idx[:,np.newaxis]
-        
-        masked_values = np.where(mask[:, :, np.newaxis], values, 0)
+        masked_values = np.where(self.xy_tuples_mask[:, :, np.newaxis], values, 0)
         
         indices = np.sum(masked_values * self.powers_of_3, axis=2)
         
