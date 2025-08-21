@@ -11,13 +11,13 @@ import os
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_19_4"
+MODEL_NAME = "S9Model8_22_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
 NETS = [5]
 
-REP_BUFFER_SIZE = 500000
+REP_BUFFER_SIZE = 100000
 BATCH_SIZE = 1024
 
 EPOCHS = 1
@@ -31,12 +31,13 @@ CPUCT = 1.0
 
 SIMULATION_TIME = 400
 
-LEARNING_RATE = 0.01
+POLCY_LEARNING_RATE = 0.01
+VALUE_LEARNING_RATE = 0.001
 
 class NTupleMCTSTrainer:
     def __init__(self):
         self.env = NTupleGomokuEnv(BOARD_SIZE, "both")
-        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SIMULATION_TIME, LEARNING_RATE)
+        self.agent = NTupleMCTSAgent(self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, SIMULATION_TIME, POLCY_LEARNING_RATE, VALUE_LEARNING_RATE)
         self.replay_buffer = MCTSReplayBuffer(REP_BUFFER_SIZE, BATCH_SIZE, BOARD_SIZE)
         
         self.epochs = EPOCHS

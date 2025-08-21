@@ -35,16 +35,16 @@ class NTuplePVBoard(NTupleBoard):
         return policies, value
         
     
-    def learnPV(self, board: np.ndarray, p_costs: np.ndarray, v_cost: float, lr: float):
+    def learnPV(self, board: np.ndarray, p_costs: np.ndarray, v_cost: float, p_lr: float, v_lr: float):
         indices = self.get_lut_indices(board)
         
         xy_indices = self.get_lut_indices_by_xy_tuples(board)
         
-        self.lut[indices,0]-= lr * v_cost
+        self.lut[indices,0]-= v_lr * v_cost
         
-        self.lut[indices,1] -= lr * np.sum(p_costs)
+        self.lut[indices,1] -= p_lr * np.sum(p_costs)
         
-        ps = np.repeat(lr*p_costs[:,np.newaxis], xy_indices.shape[1], axis=-1)
+        ps = np.repeat(p_lr * p_costs[:,np.newaxis], xy_indices.shape[1], axis=-1)
         ps = np.where(self.xy_tuples_mask, ps, 0)
         self.lut[xy_indices, 1] += ps
         self.lut[xy_indices, 2+self.xy_tuples_pos] -= ps
@@ -53,11 +53,14 @@ class NTuplePVBoard(NTupleBoard):
         
 
 class NTuplePVNetwork(NTupleNetwork):
-    def __init__(self, board_size, ts = ..., learning_rate = 0.01):
+    def __init__(self, board_size, ts = ..., learning_rate = 0.01 , p_lr = 0.01, v_lr = 0.001):
         super().__init__(board_size, ts, learning_rate)
         
         self.n_tuples: list[NTuplePVBoard] = []
         self.define_tuples()
+        
+        self.p_lr = p_lr
+        self.v_lr = v_lr
         
     def add_all_dir_n_tuples(self, n:int) -> None:
         self.n_tuples.append(NTuplePVBoard(n, self.board_size, self.board_size**2))
@@ -81,6 +84,6 @@ class NTuplePVNetwork(NTupleNetwork):
         v_cost = v_cost*(1-v_y**2)
         
         for i in self.n_tuples:
-            i.learnPV(board, p_costs, v_cost, self.learning_rate)
+            i.learnPV(board, p_costs, v_cost, self.p_lr, self.v_lr)
         
     
