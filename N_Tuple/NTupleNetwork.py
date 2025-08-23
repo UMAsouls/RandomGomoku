@@ -19,7 +19,7 @@ class NTupleBoard:
         self.n = n
         self.board_size = board_size
 
-        self.dirs = ((1, 0), (0, 1), (1, 1), (1, -1))  # 横、縦、斜め右下、斜め左下
+        self.dirs = ((1, 0), (0, 1), (1, 1), (1, -1))  # 横、縦、斜め右下、斜め右上
         
         self.tuples = np.zeros(((board_size**2)*len(self.dirs), n, 2), dtype=np.int32)
         self.lut: np.ndarray = np.zeros((3**n), dtype=np.float64)  # ルックアップテーブルの初期化
@@ -45,19 +45,16 @@ class NTupleBoard:
         x = np.arange(self.board_size)
         y = np.arange(self.board_size)
         
-        xx, yy = np.meshgrid(x, y, indexing="ij")
+        yy, xx = np.meshgrid(x, y, indexing="ij")
         pos = np.stack((xx, yy), axis = -1)
         
         pos = pos.reshape(pos.shape[0]*pos.shape[1], pos.shape[2])
         
-        w1, w2, w3, i = np.where(self.tuples_xy == pos[:, np.newaxis, np.newaxis, :])
-        
-        indices = np.where(i == 0)[0]
-        w1 = w1[indices]
-        w2 = w2[indices]
-        w3 = w3[indices]
-        
-        self.xy_tuples_pos[w1, w2] = w3
+        #numpyにおいて比較はあくまでその場所にTrueをつけるだけ
+        #2要素を比較・一致させるならTrueの数を足す
+        #その位置を知るならargmax
+        s = np.sum(self.tuples_xy == pos[:, np.newaxis, np.newaxis, :], axis = 3)
+        self.xy_tuples_pos = np.argmax(s, axis=2)
         
     
     # 全方向に対してN-tuple（座標のリスト）を定義するメソッド
