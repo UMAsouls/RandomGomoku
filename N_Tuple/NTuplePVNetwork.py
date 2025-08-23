@@ -40,7 +40,7 @@ class NTuplePVBoard(NTupleBoard):
         
         xy_indices = self.get_lut_indices_by_xy_tuples(board)
         
-        self.lut[indices,0]-= v_lr * v_cost
+        self.lut[indices,0]-= v_lr * v_cost / len(indices)
         
         self.lut[indices,1] -= p_lr * np.sum(p_costs)
         
