@@ -11,14 +11,15 @@ import os
 BOARD_SIZE = 9  # ボードのサイズ
 
 MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_23_2"
+MODEL_NAME = "S9Model8_24_4"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
 NETS = [5]
 
 REP_BUFFER_SIZE = 100000
-BATCH_SIZE = 1024
+BATCH_SIZE = 128
+LEARN_START_SIZE = BATCH_SIZE * 10
 
 EPOCHS = 1
 EPISODES = 100
@@ -77,7 +78,7 @@ class NTupleMCTSTrainer:
             epi += 1 
             
             for i in range(self.epochs):
-                if len(self.replay_buffer) > self.batch_size:
+                if len(self.replay_buffer) >= LEARN_START_SIZE:
                     print(f"--- Training Step {i+1}/{self.epochs} ---")
                     self.train_step()
             
