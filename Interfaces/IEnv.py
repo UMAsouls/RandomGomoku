@@ -40,4 +40,8 @@ class IEnv(ABC):
     def restore(self, data: EnvBackup):
         pass
     
+    @abstractmethod
+    def GetCurrentPlayer(self) -> int:
+        pass
+    
     

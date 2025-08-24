@@ -42,6 +42,9 @@ class NTupleGomokuEnv(GomokuEnv):
         else:
             return self.board.GetBoardInt()
         
+    def GetCurrentPlayer(self):
+        return self.current_player
+        
     def GetLegalAction(self) -> np.ndarray:
         b = self.board.GetBoardInt()
         

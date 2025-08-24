@@ -168,6 +168,7 @@ class NTupleMCTSAgent:
         start_time = time.time()
         
         self.root = Node(None, 1.0, self.board_size**2, -1)
+        self.search_player = self.env.GetCurrentPlayer()
         
         for i in range(self.simulation_time):
             self.__search_once()
@@ -194,9 +195,12 @@ class NTupleMCTSAgent:
         node = self.root
         done = False
         
+        select_player = self.env.GetCurrentPlayer()
+        
         while not node.is_leaf:
             self.memo.SelectStart()
             act, node = node.select(self.cpuct)
+            select_player = self.env.GetCurrentPlayer()
             
             (x,y) = (act%self.board_size, act//self.board_size)
             _, reward, done, _ = self.env.step((x,y))
@@ -204,10 +208,12 @@ class NTupleMCTSAgent:
             
         if not done:
             self.memo.ExpandStart()
-            value = self.__expand_func(node)
+            value = -self.__expand_func(node)
             self.memo.ExpandEnd()
         else:
             value = reward
+            
+        
         
         depth = -1
         while node is not None:
