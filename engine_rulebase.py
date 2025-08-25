@@ -139,52 +139,105 @@ def calc_oneline_score(line, active, me):
             tmp_score += 10 ** 4
     return tmp_score
 
+def judge_turn(board):
+    cnt_black = 0
+    cnt_white = 0
+    for i in range(81):
+        if board[i // 9][i % 9] == "X":
+            cnt_black += 1
+        elif board[i // 9][i % 9] == "O":
+            cnt_white += 1
+    if (cnt_white - cnt_black) % 2 == 0:
+        return "O"
+    else:
+        return "X"
 
 while True:
     cmd = sys.stdin.readline().strip().split()
     if cmd[0] == "quit":
         break
     elif cmd[0] == "pos":
+        cnt_go = 0
+        black = None
         for i in range(81):
             board[i // 9][i % 9] = cmd[1][i]
-        if cmd[2] == "O":
-            black = False
-            active = "O"
+        # if cmd[2] == "O":
+        #     black = False
+        #     active = "O"
         default_scores = [0 for _ in range(81)]
         for i in range(81):
             if board[i // 9][i % 9] != "-":
                 default_scores[i] -= 10 ** 100
-        if black:
-            for i in range(81):
-                default_scores[i] += 4 - max(abs(i // 9 - 4), abs(i % 9 - 4))
-        else:
-            cnt_white = 0
-            for i in range(81):
-                if board[i // 9][i % 9] == "O" and cnt_white == 0:
-                    default_scores[i + 1] += 4
-                    default_scores[i + 9] += 4
-                    cnt_white += 1
-                elif board[i // 9][i % 9] == "O" and cnt_white == 1:
-                    default_scores[i - 1] += 4
-                    default_scores[i + 9] += 4
-                    cnt_white += 1
-                elif board[i // 9][i % 9] == "O" and cnt_white == 2:
-                    default_scores[i + 1] += 4
-                    default_scores[i - 9] += 4
-                    cnt_white += 1
-                elif board[i // 9][i % 9] == "O" and cnt_white == 3:
-                    default_scores[i - 1] += 4
-                    default_scores[i - 9] += 4
-                    cnt_white += 1
+        # if black:
+        #     for i in range(81):
+        #         default_scores[i] += 4 - max(abs(i // 9 - 4), abs(i % 9 - 4))
+        # else:
+        #     cnt_white = 0
+        #     for i in range(81):
+        #         if board[i // 9][i % 9] == "O" and cnt_white == 0:
+        #             default_scores[i + 1] += 4
+        #             default_scores[i + 9] += 4
+        #             cnt_white += 1
+        #         elif board[i // 9][i % 9] == "O" and cnt_white == 1:
+        #             default_scores[i - 1] += 4
+        #             default_scores[i + 9] += 4
+        #             cnt_white += 1
+        #         elif board[i // 9][i % 9] == "O" and cnt_white == 2:
+        #             default_scores[i + 1] += 4
+        #             default_scores[i - 9] += 4
+        #             cnt_white += 1
+        #         elif board[i // 9][i % 9] == "O" and cnt_white == 3:
+        #             default_scores[i - 1] += 4
+        #             default_scores[i - 9] += 4
+        #             cnt_white += 1
 
     elif cmd[0] == "move":
         move = int(cmd[1])
+        if black == None:
+            if judge_turn(board) == "X":
+                black = False
+                active = "O"
+            else:
+                black = True
+                active = "X"
         if black:
             board[move // 9][move % 9] = "O"
         else:
             board[move // 9][move % 9] = "X"
         default_scores[move] -= 10 ** 100
     elif cmd[0] == "go":
+        if black == None:
+            if judge_turn(board) == "X":
+                black = True
+                active = "X"
+            else:
+                black = False
+                active = "O"
+        if cnt_go == 0:
+            if black:
+                for i in range(81):
+                    default_scores[i] += 4 - max(abs(i // 9 - 4), abs(i % 9 - 4))
+            else:
+                cnt_white = 0
+                for i in range(81):
+                    if board[i // 9][i % 9] == "O" and cnt_white == 0:
+                        default_scores[i + 1] += 4
+                        default_scores[i + 9] += 4
+                        cnt_white += 1
+                    elif board[i // 9][i % 9] == "O" and cnt_white == 1:
+                        default_scores[i - 1] += 4
+                        default_scores[i + 9] += 4
+                        cnt_white += 1
+                    elif board[i // 9][i % 9] == "O" and cnt_white == 2:
+                        default_scores[i + 1] += 4
+                        default_scores[i - 9] += 4
+                        cnt_white += 1
+                    elif board[i // 9][i % 9] == "O" and cnt_white == 3:
+                        default_scores[i - 1] += 4
+                        default_scores[i - 9] += 4
+                        cnt_white += 1
+            cnt_go += 1
+
         scores = default_scores[:]
         for i in range(81):
             for j in get_lines(i, "X"):
