@@ -87,9 +87,6 @@ class NTupleGomokuEnv(GomokuEnv):
         
         self.board.SetBoard(board1, board2)
         
-        self.blackStones = len(ix1)
-        self.whiteStones = len(ix2)
-        
     def PrintBoard(self):
         self.board.PrintBoard()
         

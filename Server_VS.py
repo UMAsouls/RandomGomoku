@@ -40,17 +40,17 @@ def ReadStrBoard(game: NTupleGomokuEnv, s:str, side: str) -> np.ndarray:
             elif(s[p] == side): v = 1
             else: v = 2
             
-            board[i][j] = v
+            board[i,j] = v
             
     game.SetBoard(board)
 
 def GetStrBoard(state):
     board_str = ""
     for i in state:
-        for j in state[i]:
+        for j in i:
             s: str
-            if(state[i][j] == 0): s = "-"
-            elif(state[i][j] == 1): s = "O"
+            if(j == 0): s = "-"
+            elif(j == 1): s = "O"
             else: s = "X"
             
             board_str += s
@@ -67,7 +67,7 @@ def GetMove(game: NTupleGomokuEnv, c: int):
 def SendMove(action: int):
     return f"move {action}"
 
-def DoGo(t: int):
+def DoGo(game:NTupleGomokuEnv, t: int):
     action, _ = agent.Search()
     set_act = (action % game.board_size, action // game.board_size) #x, yのタプルに変換
     
@@ -101,7 +101,7 @@ while True:
         GetMove(game, int(cmd[1]))
         
     if cmd[0] == "go":
-        s = DoGo(int(cmd[1]))
+        s = DoGo(game, int(cmd[1]))
         print(s)
         sys.stdout.flush()
         
