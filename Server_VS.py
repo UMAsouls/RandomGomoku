@@ -41,8 +41,11 @@ def ReadStrBoard(game: NTupleGomokuEnv, s:str, side: str) -> np.ndarray:
             else: v = 2
             
             board[i,j] = v
-            
+                    
     game.SetBoard(board)
+    
+    print(board)
+    print(game.GetBoard_Player1())
 
 def GetStrBoard(state):
     board_str = ""

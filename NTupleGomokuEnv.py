@@ -79,11 +79,14 @@ class NTupleGomokuEnv(GomokuEnv):
         board1 = np.zeros((self.board_size, self.board_size), dtype=np.int64)
         board2 = np.zeros((self.board_size, self.board_size), dtype=np.int64)
         
-        ix1,iy1 = np.where(board == 1)
-        board1[ix1,iy1] = 1
+        iy1,ix1 = np.where(board == 1)
+        iy2,ix2 = np.where(board == 2)
         
-        ix2,iy2 = np.where(board == 2)
-        board2[ix2,iy2] = 1
+        board1[iy1,ix1] = 1
+        board1[iy2,ix2] = 2
+        
+        board2[iy2,ix2] = 1
+        board2[iy1,ix1] = 2
         
         self.board.SetBoard(board1, board2)
         
