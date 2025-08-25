@@ -56,10 +56,10 @@ class GomokuEnv:
         done = self.board.SetStone(x, y, self.stone)
 
         # 石の数が正常かチェック
-        if not (self.blackStones - self.whiteStones == 1 or self.blackStones == self.whiteStones):
-            # print(self.blackStones)
-            # print(self.whiteStones)
-            raise ValueError("石の数がおかしいです")
+        # if not (self.blackStones - self.whiteStones == 1 or self.blackStones == self.whiteStones):
+        #     # print(self.blackStones)
+        #     # print(self.whiteStones)
+        #     raise ValueError("石の数がおかしいです")
 
         # 報酬の初期設定
         reward = torch.tensor(0.0, device=self.device)

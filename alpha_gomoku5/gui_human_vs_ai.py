@@ -299,7 +299,7 @@ class HumanVsAIGUI:
             
             self.policy_value_net = PolicyValueNet(
                 board_size=self.board_size,
-                model_file="current_policy.model",
+                model_file="best_policy.model",
                 use_gpu=use_gpu,
                 env=temp_env
             )
@@ -534,10 +534,20 @@ class HumanVsAIGUI:
                 print(f"AI思考中: MCTSプレイアウト回数 = {playout_count}")
 
                 board = self.env.board.GetBoardInt()
+                opponent = 3 - self.env.current_player  # 相手プレイヤー
+                
+                # 1. まず自分が勝てる手を探す
                 action = self.find_winning_move(board, self.env.current_player)
                 if action is None:
+                    # 2. 相手が次に勝てる手を防ぐ
+                    action = self.find_winning_move(board, opponent)
+                    if action is not None:
+                        print(f"相手の勝利手を防御: {action}")
+                if action is None:
+                    # 3. ダブルリーチを狙う
                     action = self.find_double_threat_move(board, self.env.current_player)
                 if action is None:
+                    # 4. MCTSで最適手を選択
                     action = self.ai_player.get_action(self.env)
 
                 if action is None:

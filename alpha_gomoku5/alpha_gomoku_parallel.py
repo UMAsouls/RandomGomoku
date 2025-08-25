@@ -20,6 +20,10 @@ def run_self_play_process(board_size, policy_value_fn, c_puct, n_playout, temp):
     # モデルをロードし、envを渡す
     policy_value_net = PolicyValueNet(board_size, env=env)
     policy_value_net.load_model('./current_policy.model')
+    if policy_value_net is None:
+        raise ValueError("PolicyValueNetのモデルがロードできませんでした。")
+    else :
+        print("PolicyValueNetのモデルが正常にロードされました。")
     policy_value_fn = policy_value_net.policy_value_fn
 
     game = Game(env, board_size=board_size)
@@ -33,6 +37,7 @@ def run_self_play_process(board_size, policy_value_fn, c_puct, n_playout, temp):
 
 class ParallelAlphaZero(AlphaZero):
     def collect_selfplay_data_parallel(self, num_games):
+
         """
         複数試合を並列で自己対戦し、データを収集して拡張する。
         【変更点】ThreadPoolExecutorからProcessPoolExecutorに変更し、真の並列処理を実現。
@@ -89,7 +94,9 @@ class ParallelAlphaZero(AlphaZero):
             cycle_time = time.time() - cycle_start_time
             print(f"サイクル {i+1} 合計時間: {cycle_time:.2f}秒")
             print("-" * 50)
-
+            # 毎回最新のcurrent_policy.modelを保存する
+            self.policy_value_net.save_model('./current_policy.model')
+            print("current_policy.modelを保存しました。")
             # 一定の頻度で現在のモデルを評価する
             if (i+1) % self.check_freq == 0:
                 print(f"現在の自己対戦バッチ: {i+1}")

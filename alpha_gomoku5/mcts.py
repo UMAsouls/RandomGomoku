@@ -242,7 +242,7 @@ class MCTS(object):
                 if state[y][x] == 0:
                     legal_positions.append(x + y * board_size)
         # print("legal_positions", legal_positions)
-        board.PrintBoard()
+        # board.PrintBoard()
         return legal_positions
     
     def update_with_move(self, last_move):

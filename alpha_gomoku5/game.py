@@ -156,7 +156,7 @@ class Game(object):
             # print(self.env.current_player)
             
             _,reward,done,info= self.env.step(move)
-            self.env.board.PrintBoard()
+            # self.env.board.PrintBoard()
             if done:
                 winner = info.get('win_player', 0)
                 # winner = 3- winner  
