@@ -75,6 +75,21 @@ class NTupleGomokuEnv(GomokuEnv):
         self.blackStones = data.blackStones
         self.whiteStones = data.whiteStones
         
+    def SetBoard(self, board: np.ndarray):
+        board1 = np.zeros((self.board_size, self.board_size), dtype=np.int64)
+        board2 = np.zeros((self.board_size, self.board_size), dtype=np.int64)
+        
+        ix1,iy1 = np.where(board == 1)
+        board1[ix1,iy1] = 1
+        
+        ix2,iy2 = np.where(board == 2)
+        board2[ix2,iy2] = 1
+        
+        self.board.SetBoard(board1, board2)
+        
+        self.blackStones = len(ix1)
+        self.whiteStones = len(ix2)
+        
     def PrintBoard(self):
         self.board.PrintBoard()
         
