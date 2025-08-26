@@ -11,12 +11,13 @@ import numpy as np
 import time
 
 BOARD_SIZE = 9  # ボードのサイズ
-MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_24_4"
+MODEL_DIR = "NTupleMCTSModel2"
+MODEL_NAME = "S9Model8_26_2"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 
 SIMULATION_TIME = 400
-CPUCT = 1.0
+CPUCT = 0.01
+USE_V = True
 
 def MCTSTurn(game: NTupleGomokuEnv, agent: NTupleMCTSAgent) -> bool:
     action, _ = agent.Search()
@@ -42,7 +43,7 @@ game = NTupleGomokuEnv(BOARD_SIZE,train_target="both")  # 先手で学習
 agent = NTupleMCTSAgent(
     game, BOARD_SIZE, MODEL_PATH,
     cpuct = CPUCT, simulation_time=SIMULATION_TIME,
-    epsilon=0
+    epsilon=0, use_v=USE_V
     )
 
 agent.load()

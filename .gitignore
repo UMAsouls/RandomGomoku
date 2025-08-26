@@ -164,6 +164,7 @@ cython_debug/
 
 dqn_model/
 
+NTupleMCTSModel2/
 NTupleMCTSModel/
 NTupleQModel/
 profile.stats

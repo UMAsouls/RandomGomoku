@@ -1,5 +1,5 @@
 
-from N_Tuple import NTupleNetwork, NTuplePVNetwork
+from N_Tuple import NTupleNetwork, NTuplePVNetwork, NTupleVNetwork
 
 from N_Tuple.Debug import MCTSMemo
 from Interfaces import IEnv
@@ -135,9 +135,11 @@ class NTupleMCTSAgent:
     def __init__(
         self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10],
         cpuct:float = CPUCT, simulation_time: int = 100, p_lr: float = LEARNING_RATE, v_lr:float = LEARNING_RATE,
-        epsilon: float = EPSILON, alpha = ALPHA
+        epsilon: float = EPSILON, alpha = ALPHA, use_v:bool = False
         ):
         self.pv_network = NTuplePVNetwork(board_size, net_list, p_lr, v_lr)
+        
+        if(use_v): self.pv_network = NTupleVNetwork(board_size, net_list, p_lr, v_lr)
         
         self.env = env
         

@@ -10,16 +10,17 @@ import os
 
 BOARD_SIZE = 9  # ボードのサイズ
 
-MODEL_DIR = "NTupleMCTSModel"
-MODEL_NAME = "S9Model8_24_4"
+USE_V = False
+MODEL_DIR = "NTupleMCTSModel" if(not USE_V) else "NTupleMCTSModel2"
+MODEL_NAME = "S9Model8_26_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
 NETS = [5]
 
 REP_BUFFER_SIZE = 100000
-BATCH_SIZE = 128
-LEARN_START_SIZE = BATCH_SIZE * 10
+BATCH_SIZE = 512
+LEARN_START_SIZE = BATCH_SIZE * 4
 
 EPOCHS = 1
 EPISODES = 100
@@ -27,7 +28,7 @@ MAX_EPISODES = 100000
 
 PV_SAVERATE = 10
 
-CPUCT = 1.0
+CPUCT = 0.1
 #SEARCH_TIME = 0.1
 
 SIMULATION_TIME = 400
@@ -45,7 +46,7 @@ class NTupleMCTSTrainer:
         self.agent = NTupleMCTSAgent(
             self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, 
             SIMULATION_TIME, POLCY_LEARNING_RATE, VALUE_LEARNING_RATE,
-            EPSILON, ALPHA
+            EPSILON, ALPHA, USE_V
             )
         self.replay_buffer = MCTSReplayBuffer(REP_BUFFER_SIZE, BATCH_SIZE, BOARD_SIZE)
         
