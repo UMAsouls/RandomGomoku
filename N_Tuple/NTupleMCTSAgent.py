@@ -165,7 +165,7 @@ class NTupleMCTSAgent:
     def ResetMemo(self) -> None:
         self.memo.reset()
         
-    def Search(self) -> tuple[tuple[int,int], np.ndarray]:
+    def Search(self, limit: float = -1.0) -> tuple[tuple[int,int], np.ndarray]:
         self.memo.SearchStart()
         
         dat = self.env.backup()
@@ -177,6 +177,9 @@ class NTupleMCTSAgent:
         for i in range(self.simulation_time):
             self.__search_once()
             self.env.restore(dat)
+            
+            if(limit > 0 and time.time() - start_time > limit):
+                break
             
         
         N_values = self.root.GetChildrenNs()

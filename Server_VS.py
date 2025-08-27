@@ -74,7 +74,7 @@ def SendMove(action: int):
     return f"move {action}"
 
 def DoGo(game:NTupleGomokuEnv, t: int):
-    action, _ = agent.Search()
+    action, _ = agent.Search(t)
     set_act = (action % game.board_size, action // game.board_size) #x, yのタプルに変換
     
     _, _, done, _ = game.step(set_act)
