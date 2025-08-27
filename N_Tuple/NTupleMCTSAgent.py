@@ -135,11 +135,13 @@ class NTupleMCTSAgent:
     def __init__(
         self, env: IEnv, board_size=19, model_path = "NTupleMCTSModel", net_list:list[int] = [10],
         cpuct:float = CPUCT, simulation_time: int = 100, p_lr: float = LEARNING_RATE, v_lr:float = LEARNING_RATE,
-        epsilon: float = EPSILON, alpha = ALPHA, use_v:bool = False
+        epsilon: float = EPSILON, alpha = ALPHA, use:int = 0
         ):
-        self.pv_network = NTuplePVNetwork(board_size, net_list, p_lr, v_lr)
+        self.pv_network: NTuplePVNetwork
         
-        if(use_v): self.pv_network = NTupleVNetwork(board_size, net_list, p_lr, v_lr)
+        if(use == 0):self.pv_network = NTuplePVNetwork(board_size, net_list, p_lr, v_lr)
+        elif(use == 1): self.pv_network = NTupleVNetwork(board_size, net_list, p_lr, v_lr)
+        elif(use == 2):self.pv_network = NTuplePVNetwork(board_size, net_list, p_lr, v_lr, True)
         
         self.env = env
         

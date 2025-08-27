@@ -46,8 +46,8 @@ class NTupleVBoard(NTupleBoard):
         self.lut[indices]-= v_lr * v_cost / len(indices)
         
 class NTupleVNetwork(NTupleNetwork):
-    def __init__(self, board_size, ts = ..., learning_rate = 0.01 , p_lr = 0.01, v_lr = 0.001):
-        super().__init__(board_size, ts, learning_rate)
+    def __init__(self, board_size, ts = ..., p_lr = 0.01, v_lr = 0.001):
+        super().__init__(board_size, ts, 0.01)
         
         self.n_tuples: list[NTupleVBoard] = []
         self.define_tuples()

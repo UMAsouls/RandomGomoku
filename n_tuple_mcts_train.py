@@ -10,15 +10,15 @@ import os
 
 BOARD_SIZE = 9  # ボードのサイズ
 
-USE_V = False
-MODEL_DIR = "NTupleMCTSModel" if(not USE_V) else "NTupleMCTSModel2"
-MODEL_NAME = "S9Model8_26_1"
+USE = 2
+MODEL_DIR = f"NTupleMCTSModel{0 if USE == 0 else USE+1}"
+MODEL_NAME = "S9Model8_27_1"
 MODEL_PATH = MODEL_DIR + "/" + MODEL_NAME
 GRAPH_PATH = "pv_loss.png"
 
-NETS = [5]
+NETS = [7]
 
-REP_BUFFER_SIZE = 100000
+REP_BUFFER_SIZE = 10000
 BATCH_SIZE = 512
 LEARN_START_SIZE = BATCH_SIZE * 4
 
@@ -28,12 +28,12 @@ MAX_EPISODES = 100000
 
 PV_SAVERATE = 10
 
-CPUCT = 0.1
+CPUCT = 1.0
 #SEARCH_TIME = 0.1
 
 SIMULATION_TIME = 400
 
-POLCY_LEARNING_RATE = 0.0001
+POLCY_LEARNING_RATE = 0.001
 VALUE_LEARNING_RATE = 0.01
 
 #ディリクレノイズ作成
@@ -46,7 +46,7 @@ class NTupleMCTSTrainer:
         self.agent = NTupleMCTSAgent(
             self.env, BOARD_SIZE, MODEL_PATH, NETS, CPUCT, 
             SIMULATION_TIME, POLCY_LEARNING_RATE, VALUE_LEARNING_RATE,
-            EPSILON, ALPHA, USE_V
+            EPSILON, ALPHA, USE
             )
         self.replay_buffer = MCTSReplayBuffer(REP_BUFFER_SIZE, BATCH_SIZE, BOARD_SIZE)
         
@@ -173,6 +173,7 @@ class NTupleMCTSTrainer:
         
         for board_state, action, player, move_probs in game_history:
             game_value = 1 if player == winner else -1
+            if reward == 0: game_value = 0
             # バッファに追加
             self.replay_buffer.add(board_state, action, move_probs, game_value)
             

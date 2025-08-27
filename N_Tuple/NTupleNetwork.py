@@ -113,6 +113,16 @@ class NTupleBoard:
         
         return indices_batch
     
+    def get_aft_indices(self, xy_indices: np.ndarray, unlegal: np.ndarray) -> np.ndarray:
+        
+        indices_dif = (3**(self.n-self.xy_tuples_pos-1))
+        indices_dif[unlegal] = np.zeros(xy_indices.shape[1], dtype=np.int64)
+        indices_dif = np.where(self.xy_tuples_mask, indices_dif, 0)
+        
+        aft_indices = xy_indices+indices_dif
+        
+        return aft_indices
+    
     def evaluate_batch(self, boards: np.ndarray) -> float:
         num_boards = boards.shape[0]
         if num_boards == 0:

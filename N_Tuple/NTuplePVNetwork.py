@@ -6,7 +6,7 @@ import numpy as np
 INF = 100000000
 
 class NTuplePVBoard(NTupleBoard):
-    def __init__(self, n: int, board_size: int, p_dim: int) -> None:
+    def __init__(self, n: int, board_size: int) -> None:
         super().__init__(n,board_size)
         
         self.lut: np.ndarray = np.zeros((3**n, 1+1+self.n), dtype=np.float64)
@@ -49,12 +49,63 @@ class NTuplePVBoard(NTupleBoard):
         self.lut[xy_indices, 1] += ps
         self.lut[xy_indices, 2+self.xy_tuples_pos] -= ps
         
+
+class NTuplePVBoard2(NTuplePVBoard):
+    def __init__(self, n: int, board_size: int) -> None:
+        super().__init__(n,board_size)
         
+        self.lut: np.ndarray = np.zeros((3**n, 2), dtype=np.float64)
+        
+    def evaluatePV(self, board):
+        # ボードの状態に基づいてルックアップテーブルのインデックスを取得
+        indices = self.get_lut_indices(board)
+        
+        xy_indices = self.get_lut_indices_by_xy_tuples(board)
+        
+        # ルックアップテーブルからスコアを取得
+        value = np.sum(self.lut[indices, 0])
+        
+        uy,ux = np.where(board!=0)
+        unlegal = uy*self.board_size + ux
+        
+        base_p = np.sum(self.lut[indices,1])
+        policies = np.full(self.board_size**2, base_p, dtype=np.float64)
+        
+        aft_indices = self.get_aft_indices(xy_indices, unlegal)
+        
+        bef_ps = self.lut[xy_indices, 1]
+        aft_ps = self.lut[aft_indices, 1]
+        
+        delta_ps = np.where(self.xy_tuples_mask, aft_ps-bef_ps, 0)
+        delta = np.sum(delta_ps, axis=1)
+        
+        policies += delta
+        policies[unlegal] = -INF
+        
+        return policies, value
+    
+    def learnPV(self, board: np.ndarray, p_costs: np.ndarray, v_cost: float, p_lr: float, v_lr: float):
+        indices = self.get_lut_indices(board)
+        
+        xy_indices = self.get_lut_indices_by_xy_tuples(board)
+        
+        self.lut[indices,0]-= v_lr * v_cost / len(indices)
+        self.lut[indices,1] -= p_lr * np.sum(p_costs)
+        
+        uy,ux = np.where(board!=0)
+        unlegal = uy*self.board_size + ux
+        aft_indices = self.get_aft_indices(xy_indices, unlegal)
+        
+        ps = np.repeat(p_lr * p_costs[:,np.newaxis], xy_indices.shape[1], axis=-1)
+        ps = np.where(self.xy_tuples_mask, ps, 0)
+        self.lut[xy_indices, 1] += ps
+        self.lut[aft_indices, 1] -= ps
         
 
 class NTuplePVNetwork(NTupleNetwork):
-    def __init__(self, board_size, ts = ..., learning_rate = 0.01 , p_lr = 0.01, v_lr = 0.001):
-        super().__init__(board_size, ts, learning_rate)
+    def __init__(self, board_size, ts = ...,  p_lr = 0.01, v_lr = 0.001, use_v2 = False):
+        self.use_v2 = use_v2
+        super().__init__(board_size, ts, 0.1)
         
         self.n_tuples: list[NTuplePVBoard] = []
         self.define_tuples()
@@ -63,7 +114,8 @@ class NTuplePVNetwork(NTupleNetwork):
         self.v_lr = v_lr
         
     def add_all_dir_n_tuples(self, n:int) -> None:
-        self.n_tuples.append(NTuplePVBoard(n, self.board_size, self.board_size**2))
+        if(not self.use_v2): self.n_tuples.append(NTuplePVBoard(n, self.board_size))
+        else: self.n_tuples.append(NTuplePVBoard2(n, self.board_size))
         
     def evaluatePV(self, board: np.ndarray) -> tuple[np.ndarray, float]:
         policies = np.zeros(self.board_size**2, dtype=np.float64)
